@@ -16,9 +16,9 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// JWT Secret and Admin Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'cstore';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Salman@134';
+// Admin credentials removed (now database-driven)
 
 app.use(cors());
 app.use(express.json());
@@ -59,43 +59,13 @@ const authenticateAdmin = (req, res, next) => {
 
 // ─── AUTH ROUTES ─────────────────────────────────────────────────────────────
 
-// Register New User
-app.post('/api/auth/register', async (req, res) => {
-    try {
-        const { name, email, password } = req.body;
-        if (!name || !email || !password) return res.status(400).json({ error: 'All fields are required.' });
-        if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
-
-        // Check if email already exists
-        const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
-        if (existing) return res.status(409).json({ error: 'Email already registered.' });
-
-        // Hash password and insert
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const { data, error } = await supabase.from('users').insert([{
-            name, email, password: hashedPassword, role: 'user'
-        }]).select().single();
-
-        if (error) throw error;
-
-        const token = jwt.sign({ id: data.id, name: data.name, email: data.email, role: data.role }, JWT_SECRET, { expiresIn: '7d' });
-        res.status(201).json({ message: 'Registration successful!', token, user: { id: data.id, name: data.name, email: data.email, role: data.role } });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // Login User
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 
-        // Check admin credentials first
-        if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-            const token = jwt.sign({ id: 'admin', name: 'Admin', email: ADMIN_EMAIL, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
-            return res.status(200).json({ message: 'Admin login successful!', token, user: { id: 'admin', name: 'Admin', email: ADMIN_EMAIL, role: 'admin' } });
-        }
+        // (Hardcoded admin check removed)
 
         // Check regular user
         const { data: user, error } = await supabase.from('users').select('*').eq('email', email).single();
@@ -106,6 +76,50 @@ app.post('/api/auth/login', async (req, res) => {
 
         const token = jwt.sign({ id: user.id, name: user.name, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
         res.status(200).json({ message: 'Login successful!', token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Google Login Sync
+app.post('/api/auth/google-sync', async (req, res) => {
+    try {
+        const { email, name, supabase_id } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+
+        // Check if user exists in our DB
+        let { data: user, error } = await supabase.from('users').select('*').eq('email', email).single();
+        
+        if (error && error.code !== 'PGRST116') throw error; // PGRST116 means not found
+
+        if (!user) {
+            // New user from Google
+            return res.status(200).json({ isNew: true, message: 'User needs to complete profile' });
+        }
+
+        // Existing user - generate token
+        const token = jwt.sign({ id: user.id, name: user.name, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        res.status(200).json({ isNew: false, token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Complete Profile for Google Users
+app.post('/api/auth/complete-profile', async (req, res) => {
+    try {
+        const { email, name, password } = req.body;
+        if (!email || !name || !password) return res.status(400).json({ error: 'All fields are required' });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const { data: user, error } = await supabase.from('users').insert([{
+            name, email, password: hashedPassword, role: 'user'
+        }]).select().single();
+
+        if (error) throw error;
+
+        const token = jwt.sign({ id: user.id, name: user.name, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        res.status(201).json({ message: 'Profile completed!', token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
