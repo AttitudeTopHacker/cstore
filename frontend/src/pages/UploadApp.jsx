@@ -120,4 +120,4 @@ const UploadApp = () => {
   );
 };
 
-export default AdminUpload;
+export default UploadApp;
