@@ -23,6 +23,10 @@ const Navbar = () => {
           <Link to="/" style={{ color: '#f8fafc', textDecoration: 'none', gap: '0.5rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }}>
             <LayoutGrid size={17} /> Store
           </Link>
+          
+          <Link to={isLoggedIn ? "/upload" : "/login"} style={{ color: '#f8fafc', textDecoration: 'none', gap: '0.5rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }}>
+            <Upload size={17} /> Upload
+          </Link>
 
           {isLoggedIn ? (
             <div style={{ position: 'relative' }}>
@@ -43,19 +47,29 @@ const Navbar = () => {
                 <div style={{
                   position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: '#1e293b',
                   border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '8px',
-                  minWidth: '180px', boxShadow: '0 10px 40px rgba(0,0,0,0.4)', zIndex: 1000
+                  minWidth: '180px', boxShadow: '0 10px 40px rgba(0,0_0,0.4)', zIndex: 1000
                 }}>
                   {isAdmin ? (
-                    <Link to="/admin" onClick={() => setDropdownOpen(false)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#a5b4fc', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}>
-                      <ShieldCheck size={16} /> Admin Panel
-                    </Link>
+                    <>
+                      <Link to="/admin" onClick={() => setDropdownOpen(false)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#a5b4fc', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}>
+                        <ShieldCheck size={16} /> Admin Panel
+                      </Link>
+                      <Link to="/" onClick={() => setDropdownOpen(false)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}>
+                        <LayoutGrid size={16} /> View Store
+                      </Link>
+                    </>
                   ) : (
                     <Link to="/dashboard" onClick={() => setDropdownOpen(false)}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}>
                       <User size={16} /> My Dashboard
                     </Link>
                   )}
+                  <Link to="/upload" onClick={() => setDropdownOpen(false)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}>
+                    <Upload size={16} /> Upload App
+                  </Link>
                   <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
                   <button onClick={handleLogout}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.9rem' }}>

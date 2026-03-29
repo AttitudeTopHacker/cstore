@@ -43,14 +43,14 @@ const Login = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="glass" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Email */}
+          {/* Email / Username */}
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500 }}>Email Address</label>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500 }}>Email or Username</label>
             <div style={{ position: 'relative' }}>
               <Mail size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
-                type="email" name="email" required value={formData.email} onChange={handleChange}
-                placeholder="you@example.com"
+                type="text" name="email" required value={formData.email} onChange={handleChange}
+                placeholder="Email or Admin Username"
                 style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px 12px 12px 44px', borderRadius: '10px', color: 'white', outline: 'none', fontSize: '0.95rem' }}
               />
             </div>
@@ -72,7 +72,7 @@ const Login = () => {
           {/* Admin Hint */}
           <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '10px', padding: '10px 14px', display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.8rem', color: '#a5b4fc' }}>
             <ShieldCheck size={15} />
-            Admin? Use: <strong>admin@cstore.com</strong> / <strong>Admin@123</strong>
+            Admin? Use: <strong>cstore</strong> / <strong>Salman@134</strong>
           </div>
 
           {status.error && (

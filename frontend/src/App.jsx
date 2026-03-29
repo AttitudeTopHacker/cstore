@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import UserDashboard from './pages/UserDashboard';
+import UploadApp from './pages/UploadApp';
 import './index.css';
 
 function App() {
@@ -25,6 +26,13 @@ function App() {
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <UserDashboard />
+              </ProtectedRoute>
+            } />
+
+            {/* General Upload Route (Any logged in user) */}
+            <Route path="/upload" element={
+              <ProtectedRoute>
+                <UploadApp />
               </ProtectedRoute>
             } />
 

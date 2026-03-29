@@ -110,6 +110,9 @@ const AdminDashboard = () => {
           <p style={{ color: 'var(--text-muted)' }}>Full control over CStore</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={() => navigate('/')} style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'inherit', fontWeight: 600 }}>
+            <LayoutGrid size={16} /> Visit Store
+          </button>
           <button onClick={fetchAll} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--text-muted)', padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'inherit' }}>
             <RefreshCw size={16} /> Refresh
           </button>

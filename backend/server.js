@@ -17,8 +17,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@cstore.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'cstore';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Salman@134';
 
 app.use(cors());
 app.use(express.json());
@@ -218,8 +218,8 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Upload New App (Admin only)
-app.post('/api/upload', authenticateAdmin, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'icon', maxCount: 1 }]), async (req, res) => {
+// Upload New App (Authenticated users)
+app.post('/api/upload', authenticateUser, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'icon', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, version, description } = req.body;
         const appFile = req.files['file'][0];

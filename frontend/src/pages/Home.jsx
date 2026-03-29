@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Download, LayoutGrid, Database } from 'lucide-react';
+import { Download, LayoutGrid, Database, Search, Upload, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import config from '../config';
 
 const Home = () => {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchApps();
@@ -32,27 +35,59 @@ const Home = () => {
     }
   };
 
+  const filteredApps = apps.filter(app => 
+    app.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (app.description && app.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
   if (loading) return <div className="flex-center" style={{ height: '70vh' }}>Loading...</div>;
 
   return (
     <div style={{ padding: '2rem 0' }}>
-      <header style={{ marginBottom: '3rem' }}>
-        <h1 style={{ fontSize: '3.5rem', marginBottom: '1rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          Explore Our Store
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', maxWidth: '600px' }}>
-          Discover the latest premium applications, uploaded directly to our high-speed servers.
-        </p>
+      <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '2rem' }}>
+        <div>
+          <h1 style={{ fontSize: '3.5rem', marginBottom: '1rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Explore Our Store
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', maxWidth: '600px' }}>
+            Discover the latest premium applications, uploaded directly to our high-speed servers.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button onClick={() => navigate('/upload')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '12px 24px' }}>
+                <Plus size={18} /> Upload App
+            </button>
+        </div>
       </header>
 
+      {/* Search Bar Section */}
+      <div className="glass" style={{ marginBottom: '3rem', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <Search size={20} style={{ color: 'var(--text-muted)' }} />
+        <input 
+            type="text" 
+            placeholder="Search for applications..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ 
+                background: 'none', 
+                border: 'none', 
+                outline: 'none', 
+                color: 'white', 
+                fontSize: '1.1rem', 
+                width: '100%',
+                fontFamily: 'inherit'
+            }} 
+        />
+      </div>
+
       <div className="grid-apps">
-        {apps.length === 0 ? (
+        {filteredApps.length === 0 ? (
           <div className="glass" style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center' }}>
             <Database size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-            <h3 style={{ color: 'var(--text-muted)' }}>No apps uploaded yet.</h3>
+            <h3 style={{ color: 'var(--text-muted)' }}>{searchTerm ? `No apps found matching "${searchTerm}"` : 'No apps uploaded yet.'}</h3>
           </div>
         ) : (
-          apps.map((app) => (
+          filteredApps.map((app) => (
             <div key={app.id} className="glass" style={{ padding: '1.5rem', transition: 'all 0.3s' }}>
               <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>
