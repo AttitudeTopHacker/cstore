@@ -94,11 +94,9 @@ const AdminDashboard = () => {
     boxShadow: activeTab === tab ? '0 4px 15px rgba(99,102,241,0.3)' : 'none',
   });
 
-  if (loading) return <div className="flex-center" style={{ height: '70vh' }}><Loader2 size={32} className="animate-spin" /></div>;
-
   return (
     <div style={{ padding: '2.5rem 0' }}>
-      {/* Header */}
+      {/* Header - Always Visible */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
@@ -122,13 +120,22 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <button style={tabStyle(TAB.OVERVIEW)} onClick={() => setActiveTab(TAB.OVERVIEW)}><LayoutGrid size={16} /> Overview</button>
-        <button style={tabStyle(TAB.APPS)} onClick={() => setActiveTab(TAB.APPS)}><Package size={16} /> Apps ({apps.length})</button>
-        <button style={tabStyle(TAB.USERS)} onClick={() => setActiveTab(TAB.USERS)}><Users size={16} /> Users ({users.length})</button>
-        <button style={tabStyle(TAB.UPLOAD)} onClick={() => setActiveTab(TAB.UPLOAD)}><Upload size={16} /> Upload App</button>
-      </div>
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40vh', color: 'var(--text-muted)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <Loader2 size={40} className="animate-spin" style={{ marginBottom: '1rem', color: 'var(--primary)' }} />
+            <p>Loading Dashboard...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+            <button style={tabStyle(TAB.OVERVIEW)} onClick={() => setActiveTab(TAB.OVERVIEW)}><LayoutGrid size={16} /> Overview</button>
+            <button style={tabStyle(TAB.APPS)} onClick={() => setActiveTab(TAB.APPS)}><Package size={16} /> Apps ({apps.length})</button>
+            <button style={tabStyle(TAB.USERS)} onClick={() => setActiveTab(TAB.USERS)}><Users size={16} /> Users ({users.length})</button>
+            <button style={tabStyle(TAB.UPLOAD)} onClick={() => setActiveTab(TAB.UPLOAD)}><Upload size={16} /> Upload App</button>
+          </div>
 
       {/* ── OVERVIEW TAB ── */}
       {activeTab === TAB.OVERVIEW && (
@@ -314,6 +321,8 @@ const AdminDashboard = () => {
             </button>
           </form>
         </div>
+      )}
+        </>
       )}
     </div>
   );
