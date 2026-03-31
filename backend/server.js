@@ -14,7 +14,12 @@ const port = process.env.PORT || 5000;
 // Supabase Setup
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+if (!supabaseUrl || !supabaseKey) {
+    console.error('❌ Supabase credentials are missing (check environment variables).');
+}
+
+const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder');
 
 // JWT Secret and Admin Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
@@ -134,7 +139,8 @@ app.get('/api/apps', async (req, res) => {
         if (error) throw error;
         res.status(200).json(data);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error fetching apps:', err.message);
+        res.status(500).json({ error: 'Server error fetching apps. Check database connection.', details: err.message });
     }
 });
 
