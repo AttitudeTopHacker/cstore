@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LayoutGrid, User, LogIn, LogOut, ShieldCheck, ChevronDown, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import ConfirmModal from './ConfirmModal';
 
 const Navbar = () => {
   const { user, isLoggedIn, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const handleLogout = () => { logout(); navigate('/'); setDropdownOpen(false); };
+  const handleLogout = () => { logout(); navigate('/'); setDropdownOpen(false); setShowLogoutModal(false); };
 
   return (
     <nav>
@@ -71,7 +73,7 @@ const Navbar = () => {
                     <Upload size={16} /> Upload App
                   </Link>
                   <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
-                  <button onClick={handleLogout}
+                  <button onClick={() => { setShowLogoutModal(true); setDropdownOpen(false); }}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.9rem' }}>
                     <LogOut size={16} /> Logout
                   </button>
@@ -85,6 +87,16 @@ const Navbar = () => {
           )}
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal 
+        isOpen={showLogoutModal}
+        title="Logout?"
+        message="Are you sure you want to log out from CStore?"
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutModal(false)}
+        type="danger"
+      />
 
       {/* Backdrop for dropdown */}
       {dropdownOpen && (

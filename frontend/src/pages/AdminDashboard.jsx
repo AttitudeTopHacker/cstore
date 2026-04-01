@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Users, Package, Download, Trash2, Upload, LogOut, LayoutGrid,
-  ShieldCheck, AlertCircle, CheckCircle, Loader2, RefreshCw, File, Image as ImageIcon
+  ShieldCheck, AlertCircle, CheckCircle, Loader2, RefreshCw, File, Image as ImageIcon,
+  UserX, UserCheck, Store
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
+import ConfirmModal from '../components/ConfirmModal';
 
 const TAB = { OVERVIEW: 'overview', APPS: 'apps', USERS: 'users', UPLOAD: 'upload' };
 
@@ -18,6 +18,7 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionStatus, setActionStatus] = useState({ loading: false, success: null, error: null });
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
 
   // Upload form state
   const [formData, setFormData] = useState({ name: '', version: '', description: '' });
@@ -43,21 +44,59 @@ const AdminDashboard = () => {
   useEffect(() => { fetchAll(); }, [token]);
 
   const handleDeleteApp = async (id) => {
-    if (!window.confirm('App ko permanently delete karna chahte hain?')) return;
-    try {
-      const res = await fetch(`${config.API_BASE_URL}/admin/apps/${id}`, { method: 'DELETE', headers });
-      if (!res.ok) throw new Error('Delete failed');
-      setApps(apps.filter(a => a.id !== id));
-    } catch (err) { alert(err.message); }
+    setModalConfig({
+      isOpen: true,
+      title: 'Delete App?',
+      message: 'Are you sure you want to permanently delete this application? This action cannot be undone.',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${config.API_BASE_URL}/admin/apps/${id}`, { method: 'DELETE', headers });
+          if (!res.ok) throw new Error('Delete failed');
+          setApps(apps.filter(a => a.id !== id));
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err) { alert(err.message); }
+      }
+    });
+  };
+
+  const handleStatusToggle = async (userId, currentStatus) => {
+    const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
+    setModalConfig({
+      isOpen: true,
+      title: `${newStatus === 'suspended' ? 'Suspend' : 'Activate'} User?`,
+      message: `Are you sure you want to ${newStatus === 'suspended' ? 'suspend' : 're-activate'} this user's account?`,
+      type: newStatus === 'suspended' ? 'danger' : 'primary',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${config.API_BASE_URL}/admin/users/${userId}/status`, {
+            method: 'PATCH',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+          });
+          if (!res.ok) throw new Error('Status update failed');
+          setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err) { alert(err.message); }
+      }
+    });
   };
 
   const handleDeleteUser = async (id) => {
-    if (!window.confirm('Is user ko permanently delete karna chahte hain?')) return;
-    try {
-      const res = await fetch(`${config.API_BASE_URL}/admin/users/${id}`, { method: 'DELETE', headers });
-      if (!res.ok) throw new Error('Delete failed');
-      setUsers(users.filter(u => u.id !== id));
-    } catch (err) { alert(err.message); }
+    setModalConfig({
+      isOpen: true,
+      title: 'Delete User?',
+      message: 'Are you sure you want to permanently delete this user and all their uploaded apps? This is irreversible.',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${config.API_BASE_URL}/admin/users/${id}`, { method: 'DELETE', headers });
+          if (!res.ok) throw new Error('Delete failed');
+          setUsers(users.filter(u => u.id !== id));
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err) { alert(err.message); }
+      }
+    });
   };
 
   const handleUpload = async (e) => {
@@ -114,7 +153,16 @@ const AdminDashboard = () => {
           <button onClick={fetchAll} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--text-muted)', padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'inherit' }}>
             <RefreshCw size={16} /> Refresh
           </button>
-          <button onClick={handleLogout} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '10px 18px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'inherit', fontWeight: 600 }}>
+          <button 
+            onClick={() => setModalConfig({
+              isOpen: true,
+              title: 'Logout?',
+              message: 'Are you sure you want to log out from the Admin Panel?',
+              type: 'danger',
+              onConfirm: handleLogout
+            })}
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '10px 18px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'inherit', fontWeight: 600 }}
+          >
             <LogOut size={16} /> Logout
           </button>
         </div>
@@ -222,21 +270,20 @@ const AdminDashboard = () => {
       {activeTab === TAB.USERS && (
         <div>
           <div className="glass" style={{ overflow: 'auto', borderRadius: '16px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                  {['#', 'Name', 'Email', 'Role', 'Joined', 'Action'].map(h => (
+                  {['Name', 'Email', 'Apps', 'Store', 'Status', 'Joined', 'Actions'].map(h => (
                     <th key={h} style={{ padding: '14px 20px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {users.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No users registered yet.</td></tr>
+                  <tr><td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No users registered yet.</td></tr>
                 )}
-                {users.map((u, i) => (
+                {users.map((u) => (
                   <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{i + 1}</td>
                     <td style={{ padding: '14px 20px', fontWeight: 600 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 700, flexShrink: 0 }}>
@@ -247,16 +294,44 @@ const AdminDashboard = () => {
                     </td>
                     <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.email}</td>
                     <td style={{ padding: '14px 20px' }}>
-                      <span style={{ background: u.role === 'admin' ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)', color: u.role === 'admin' ? '#f87171' : '#a5b4fc', padding: '3px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
-                        {u.role}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: 'var(--primary)' }}>
+                        <Package size={14} /> {u.apps_count}
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px 20px' }}>
+                      {u.apps_count === 0 ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#f59e0b', fontSize: '0.8rem' }}>
+                          <AlertCircle size={14} /> Empty
+                        </span>
+                      ) : (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#10b981', fontSize: '0.8rem' }}>
+                          <Store size={14} /> Active
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '14px 20px' }}>
+                      <span style={{ 
+                        background: u.status === 'suspended' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
+                        color: u.status === 'suspended' ? '#ef4444' : '#10b981',
+                        padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700,
+                        textTransform: 'uppercase'
+                      }}>
+                        {u.status || 'active'}
                       </span>
                     </td>
                     <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatDate(u.created_at)}</td>
                     <td style={{ padding: '14px 20px' }}>
-                      <button onClick={() => handleDeleteUser(u.id)}
-                        style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '6px 12px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontFamily: 'inherit', fontSize: '0.82rem' }}>
-                        <Trash2 size={13} /> Delete
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => handleStatusToggle(u.id, u.status)}
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: u.status === 'suspended' ? '#10b981' : '#f59e0b', padding: '6px 10px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          {u.status === 'suspended' ? <UserCheck size={14} /> : <UserX size={14} />}
+                          <span style={{ fontSize: '0.8rem' }}>{u.status === 'suspended' ? 'Unsuspend' : 'Suspend'}</span>
+                        </button>
+                        <button onClick={() => handleDeleteUser(u.id)}
+                          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '6px 10px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -324,6 +399,16 @@ const AdminDashboard = () => {
       )}
         </>
       )}
+      
+      {/* Confirmation Modal */}
+      <ConfirmModal 
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        type={modalConfig.type}
+      />
     </div>
   );
 };

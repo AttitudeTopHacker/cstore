@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import config from '../config';
+import { App } from '@capacitor/app';
 
 const AuthContext = createContext(null);
 
@@ -23,7 +24,6 @@ export const AuthProvider = ({ children }) => {
       // 2. Check Supabase session (handles redirects/social login)
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Sync with backend to get full user role/object
         await syncUserWithBackend(session.user);
       }
       
@@ -31,6 +31,23 @@ export const AuthProvider = ({ children }) => {
     };
 
     initAuth();
+
+    // Deep link listener for mobile app
+    const setupDeepLink = async () => {
+      App.addListener('appUrlOpen', async (event) => {
+        // Example: com.cstore.app://login#access_token=...
+        const url = new URL(event.url);
+        if (url.hash) {
+          // Supabase handles the hash automatically when getSession is called
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await syncUserWithBackend(session.user);
+          }
+        }
+      });
+    };
+
+    setupDeepLink();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -41,7 +58,10 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      App.removeAllListeners();
+    };
   }, []);
 
   const syncUserWithBackend = async (supabaseUser) => {
@@ -58,10 +78,8 @@ export const AuthProvider = ({ children }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      if (!data.isNew) {
+      if (!data.isNew || data.user) {
         login(data.user, data.token);
-      } else {
-        // We'll handle 'isNew' in the Login page to show popup
       }
       return data;
     } catch (err) {
@@ -77,17 +95,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Supabase signout error:', err);
+    }
     setUser(null);
     setToken(null);
     localStorage.removeItem('cstore_token');
     localStorage.removeItem('cstore_user');
+    // Force a full page reload to Home to clear all states
+    window.location.href = '/';
   };
 
   const loginWithGoogle = async () => {
+    // On Android, use the custom scheme, on Web use the current site URL
+    const isApp = window.location.hostname === 'localhost' && !window.location.port;
+    const redirectTo = isApp ? 'com.cstore.app://login' : window.location.origin;
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo }
     });
     if (error) throw error;
   };

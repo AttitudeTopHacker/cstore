@@ -76,6 +76,11 @@ app.post('/api/auth/login', async (req, res) => {
         const { data: user, error } = await supabase.from('users').select('*').eq('email', email).single();
         if (error || !user) return res.status(401).json({ error: 'Invalid email or password.' });
 
+        // Check if account is suspended
+        if (user.status === 'suspended') {
+            return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ error: 'Invalid email or password.' });
 
@@ -100,6 +105,11 @@ app.post('/api/auth/google-sync', async (req, res) => {
         if (!user) {
             // New user from Google
             return res.status(200).json({ isNew: true, message: 'User needs to complete profile' });
+        }
+
+        // Check if account is suspended
+        if (user.status === 'suspended') {
+            return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
         }
 
         // Existing user - generate token
@@ -205,15 +215,28 @@ app.get('/api/user/downloads', authenticateUser, async (req, res) => {
 
 // ─── ADMIN ROUTES ─────────────────────────────────────────────────────────────
 
-// Get All Users (Admin only)
+// Get All Users with App Counts (Admin only)
 app.get('/api/admin/users', authenticateAdmin, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data: users, error: userError } = await supabase
             .from('users')
-            .select('id, name, email, role, created_at')
+            .select('id, name, email, role, status, created_at')
+            .filter('role', 'neq', 'admin')
             .order('created_at', { ascending: false });
-        if (error) throw error;
-        res.status(200).json(data);
+        
+        if (userError) throw userError;
+
+        // Fetch app counts for each user
+        const usersWithStats = await Promise.all(users.map(async (u) => {
+            const { count, error } = await supabase
+                .from('apps')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', u.id);
+            
+            return { ...u, apps_count: count || 0 };
+        }));
+
+        res.status(200).json(usersWithStats);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -262,10 +285,11 @@ app.post('/api/upload', authenticateUser, upload.fields([{ name: 'file', maxCoun
             iconUrl = `${supabaseUrl}/storage/v1/object/public/cstore-icons/${iconFileName}`;
         }
 
-        // Insert Metadata
+        // Insert Metadata with UserID
         const { error: dbError } = await supabase.from('apps').insert([{
             name, version, description, file_url: fileUrl, icon_url: iconUrl,
-            download_count: 0, size: (appFile.size / (1024 * 1024)).toFixed(2) + ' MB'
+            download_count: 0, size: (appFile.size / (1024 * 1024)).toFixed(2) + ' MB',
+            user_id: req.user.role === 'admin' ? null : req.user.id
         }]);
         if (dbError) throw dbError;
 
@@ -287,10 +311,29 @@ app.delete('/api/admin/apps/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
+// Update User Status (Suspend/Unsuspend)
+app.patch('/api/admin/users/:id/status', authenticateAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body; // 'active' or 'suspended'
+        
+        if (!['active', 'suspended'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const { error } = await supabase.from('users').update({ status }).eq('id', id);
+        if (error) throw error;
+        res.status(200).json({ message: `User ${status} successfully` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Delete User (Admin only)
 app.delete('/api/admin/users/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
+        // Cascading delete is handled by database 'ON DELETE CASCADE'
         const { error } = await supabase.from('users').delete().eq('id', id);
         if (error) throw error;
         res.status(200).json({ message: 'User deleted successfully' });
