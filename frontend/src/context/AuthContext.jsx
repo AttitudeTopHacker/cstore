@@ -67,29 +67,51 @@ export const AuthProvider = ({ children }) => {
 
     // ── Android deep-link handler ─────────────────────────────────────────────
     // After Google auth, Chrome redirects to com.cstore.app://login?code=...
-    // Capacitor fires appUrlOpen with the full URL — we exchange the code.
+    // KEY FIX: extract ONLY the 'code' param — not the full URL.
     const setupDeepLink = async () => {
       if (!Capacitor.isNativePlatform()) return;
 
       App.addListener('appUrlOpen', async (event) => {
         console.log('[DeepLink] received:', event.url);
         try {
-          // Supabase PKCE flow: URL contains ?code=  (newer Supabase v2)
-          // Implicit flow:      URL contains #access_token=
-          if (event.url.includes('code=') || event.url.includes('access_token')) {
-            // exchangeCodeForSession handles both PKCE code & access_token in hash
-            const { data, error } = await supabase.auth.exchangeCodeForSession(event.url);
+          const parsedUrl = new URL(event.url);
+
+          // PKCE flow (Supabase v2 default): URL has ?code=XXXXXXXX
+          const code = parsedUrl.searchParams.get('code');
+
+          // Implicit flow fallback: URL has #access_token=...&refresh_token=...
+          const hash = parsedUrl.hash.replace('#', '');
+          const hashParams   = new URLSearchParams(hash);
+          const accessToken  = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+
+          if (code) {
+            console.log('[DeepLink] PKCE code found, exchanging...');
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
             if (error) {
-              // Fallback: just call getSession (for implicit/access_token flows)
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session?.user) await syncUserWithBackend(session.user);
+              console.error('[DeepLink] exchange failed:', error.message);
+              // onAuthStateChange may still fire — do nothing extra
             } else if (data?.session?.user) {
+              console.log('[DeepLink] PKCE success:', data.session.user.email);
               await syncUserWithBackend(data.session.user);
             }
+          } else if (accessToken && refreshToken) {
+            console.log('[DeepLink] implicit tokens found, setting session...');
+            const { data, error } = await supabase.auth.setSession({
+              access_token:  accessToken,
+              refresh_token: refreshToken,
+            });
+            if (!error && data?.session?.user) {
+              await syncUserWithBackend(data.session.user);
+            }
+          } else {
+            // Supabase may have already handled it via detectSessionInUrl
+            console.log('[DeepLink] no code/token in URL, checking session...');
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) await syncUserWithBackend(session.user);
           }
         } catch (err) {
-          console.error('[DeepLink] error:', err);
-          // Last resort fallback
+          console.error('[DeepLink] parse error:', err);
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) await syncUserWithBackend(session.user);
         }
