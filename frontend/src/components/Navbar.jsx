@@ -20,8 +20,8 @@ const Navbar = () => {
           CStore <span style={{ fontWeight: 300, fontSize: '0.9rem', color: '#94a3b8' }}>PREMIUM</span>
         </Link>
 
-        {/* Nav Links */}
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        {/* Nav Links - Desktop Only */}
+        <div className="desktop-only" style={{ gap: '0.5rem', alignItems: 'center' }}>
           <Link to="/" style={{ color: '#f8fafc', textDecoration: 'none', gap: '0.5rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }}>
             <LayoutGrid size={17} /> Store
           </Link>
@@ -29,6 +29,11 @@ const Navbar = () => {
           <Link to={isLoggedIn ? "/upload" : "/login"} style={{ color: '#f8fafc', textDecoration: 'none', gap: '0.5rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)' }}>
             <Upload size={17} /> Upload
           </Link>
+        </div>
+
+        {/* Auth Section */}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+
 
           {isLoggedIn ? (
             <div style={{ position: 'relative' }}>

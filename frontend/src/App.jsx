@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import BottomNavbar from './components/BottomNavbar';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -42,6 +43,7 @@ function App() {
             } />
           </Routes>
         </main>
+        <BottomNavbar />
       </div>
     </Router>
   );

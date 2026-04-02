@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import config from '../config';
+import { supabase } from '../supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 const AdminUpload = () => {
+  const { token } = useAuth();
   const [formData, setFormData] = useState({ name: '', version: '', description: '' });
   const [files, setFiles] = useState({ app: null, icon: null });
   const [status, setStatus] = useState({ loading: false, success: false, error: null });
@@ -22,20 +25,57 @@ const AdminUpload = () => {
     if (!files.app) return setStatus({ ...status, error: 'App file is required!' });
 
     setStatus({ loading: true, success: false, error: null });
-    const data = new FormData();
-    data.append('name', formData.name);
-    data.append('version', formData.version);
-    data.append('description', formData.description);
-    data.append('file', files.app);
-    if (files.icon) data.append('icon', files.icon);
 
     try {
+      // 1. Upload APK to Supabase
+      const appFileName = `${Date.now()}-${files.app.name}`;
+      const { data: appData, error: appError } = await supabase.storage
+        .from('cstore-apps')
+        .upload(appFileName, files.app);
+      
+      if (appError) throw appError;
+
+      const { data: { publicUrl: fileUrl } } = supabase.storage
+        .from('cstore-apps')
+        .getPublicUrl(appFileName);
+
+      // 2. Upload Icon to Supabase (Optional)
+      let iconUrl = null;
+      if (files.icon) {
+        const iconFileName = `${Date.now()}-${files.icon.name}`;
+        const { data: iconData, error: iconError } = await supabase.storage
+          .from('cstore-icons')
+          .upload(iconFileName, files.icon);
+        
+        if (iconError) throw iconError;
+
+        const { data: { publicUrl: iconPublicUrl } } = supabase.storage
+          .from('cstore-icons')
+          .getPublicUrl(iconFileName);
+        iconUrl = iconPublicUrl;
+      }
+
+      // 3. Send metadata to backend
       const response = await fetch(`${config.API_BASE_URL}/upload`, {
         method: 'POST',
-        body: data,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          version: formData.version,
+          description: formData.description,
+          file_url: fileUrl,
+          icon_url: iconUrl,
+          size: (files.app.size / (1024 * 1024)).toFixed(2) + ' MB'
+        }),
       });
 
-      if (!response.ok) throw new Error('Upload failed!');
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Upload failed!');
+      }
       
       setStatus({ loading: false, success: true, error: null });
       setTimeout(() => navigate('/'), 2000);

@@ -10,47 +10,27 @@ const Login = () => {
   const [status, setStatus] = useState({ loading: false, error: null });
   const [showModal, setShowModal] = useState(false);
   const [newUserData, setNewUserData] = useState({ name: '', email: '', password: '' });
-  const { login, loginWithGoogle, completeProfile } = useAuth();
+  const { login, loginWithGoogle, completeProfile, isLoggedIn, user, isNewUser, pendingUser, setIsNewUser } = useAuth();
   const navigate = useNavigate();
-
-  // Listen for redirected Google Auth success
+  
+  // React to successful login
   useEffect(() => {
-    const handleGoogleRedirect = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setStatus({ loading: true, error: null });
-        try {
-          const res = await fetch(`${config.API_BASE_URL}/auth/google-sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: session.user.email,
-              name: session.user.user_metadata.full_name,
-              supabase_id: session.user.id
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
+    if (isLoggedIn && !isNewUser) {
+      navigate(user?.role === 'admin' ? '/admin' : '/dashboard');
+    }
+  }, [isLoggedIn, isNewUser, user, navigate]);
 
-          if (data.isNew) {
-            setNewUserData({ 
-              name: session.user.user_metadata.full_name || session.user.email.split('@')[0], 
-              email: session.user.email, 
-              password: '' 
-            });
-            setShowModal(true);
-            setStatus({ loading: false, error: null });
-          } else {
-            login(data.user, data.token);
-            navigate(data.user.role === 'admin' ? '/admin' : '/dashboard');
-          }
-        } catch (err) {
-          setStatus({ loading: false, error: err.message });
-        }
-      }
-    };
-    handleGoogleRedirect();
-  }, []);
+  // React to new user needing profile completion
+  useEffect(() => {
+    if (isNewUser && pendingUser) {
+      setNewUserData({
+        name: pendingUser.name,
+        email: pendingUser.email,
+        password: ''
+      });
+      setShowModal(true);
+    }
+  }, [isNewUser, pendingUser]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -85,8 +65,15 @@ const Login = () => {
     e.preventDefault();
     setStatus({ loading: true, error: null });
     try {
-      const data = await completeProfile(newUserData);
+      // Use pendingUser for supabase_id and current form data for name/email/password
+      const updatedProfileData = {
+        ...newUserData,
+        supabase_id: pendingUser.supabase_id
+      };
+      
+      const data = await completeProfile(updatedProfileData);
       setShowModal(false);
+      setIsNewUser(false); // Reset the flag
       navigate(data.user.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       setStatus({ loading: false, error: err.message });

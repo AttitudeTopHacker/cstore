@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
 import { supabase } from '../supabaseClient';
 import config from '../config';
 
@@ -10,6 +11,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [pendingUser, setPendingUser] = useState(null);
 
   // ─── Helper: sync supabase user with our backend ───────────────────────────
   const syncUserWithBackend = async (supabaseUser) => {
@@ -26,7 +29,14 @@ export const AuthProvider = ({ children }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      if (!data.isNew || data.user) {
+      if (data.isNew) {
+        setIsNewUser(true);
+        setPendingUser({
+          name: supabaseUser.user_metadata?.full_name || supabaseUser.email.split('@')[0],
+          email: supabaseUser.email,
+          supabase_id: supabaseUser.id
+        });
+      } else if (data.user) {
         _setLogin(data.user, data.token);
       }
       return data;
@@ -73,6 +83,10 @@ export const AuthProvider = ({ children }) => {
 
       App.addListener('appUrlOpen', async (event) => {
         console.log('[DeepLink] received:', event.url);
+        
+        // KEY FIX: Close the in-app browser immediately when returning to the app
+        try { await Browser.close(); } catch (e) { /* ignore */ }
+
         try {
           const parsedUrl = new URL(event.url);
 
@@ -149,13 +163,22 @@ export const AuthProvider = ({ children }) => {
   const login = (userData, tokenData) => _setLogin(userData, tokenData);
 
   const logout = async () => {
-    // Clear UI state immediately
-    _clearAuth();
-    // Sign out from Supabase in background
-    supabase.auth.signOut().catch((err) =>
-      console.error('Supabase signout error:', err)
-    );
-    window.location.href = '/';
+    try {
+      // 1. Clear Supabase session FIRST (and wait for it)
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // 2. Clear our custom local state
+      _clearAuth();
+      
+      // 3. Redirect to home
+      window.location.href = '/';
+    } catch (err) {
+      console.error('Logout error:', err.message);
+      // Fallback: clear local regardless
+      _clearAuth();
+      window.location.href = '/';
+    }
   };
 
   const loginWithGoogle = async () => {
@@ -169,14 +192,20 @@ export const AuthProvider = ({ children }) => {
 
     console.log('[Google] redirectTo:', redirectTo, '| native:', isNativeApp);
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
-        skipBrowserRedirect: false,
+        skipBrowserRedirect: isNativeApp, // Important for Capacitor: get URL instead of redirecting
       },
     });
+
     if (error) throw error;
+
+    // For native apps, open the URL in the system browser / custom tab
+    if (isNativeApp && data?.url) {
+      await Browser.open({ url: data.url, windowName: '_self' });
+    }
   };
 
   const completeProfile = async (profileData) => {
@@ -199,6 +228,7 @@ export const AuthProvider = ({ children }) => {
       value={{
         user, token, loading,
         isAdmin, isLoggedIn,
+        isNewUser, pendingUser, setIsNewUser,
         login, logout, loginWithGoogle, completeProfile,
       }}
     >

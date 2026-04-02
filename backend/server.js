@@ -262,38 +262,22 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
 });
 
 // Upload New App (Authenticated users)
-app.post('/api/upload', authenticateUser, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'icon', maxCount: 1 }]), async (req, res) => {
+app.post('/api/upload', authenticateUser, async (req, res) => {
     try {
-        const { name, version, description } = req.body;
-        const appFile = req.files['file'][0];
-        const iconFile = req.files['icon'] ? req.files['icon'][0] : null;
+        const { name, version, description, file_url, icon_url, size } = req.body;
 
-        if (!appFile) return res.status(400).json({ error: 'App file is required' });
-
-        // Upload App File
-        const appFileName = `${Date.now()}-${appFile.originalname}`;
-        const { error: appError } = await supabase.storage.from('cstore-apps').upload(appFileName, appFile.buffer, { contentType: appFile.mimetype });
-        if (appError) throw appError;
-        const fileUrl = `${supabaseUrl}/storage/v1/object/public/cstore-apps/${appFileName}`;
-
-        // Upload Icon File (Optional)
-        let iconUrl = null;
-        if (iconFile) {
-            const iconFileName = `${Date.now()}-${iconFile.originalname}`;
-            const { error: iconError } = await supabase.storage.from('cstore-icons').upload(iconFileName, iconFile.buffer, { contentType: iconFile.mimetype });
-            if (iconError) throw iconError;
-            iconUrl = `${supabaseUrl}/storage/v1/object/public/cstore-icons/${iconFileName}`;
-        }
+        if (!file_url) return res.status(400).json({ error: 'App file URL is required' });
 
         // Insert Metadata with UserID
         const { error: dbError } = await supabase.from('apps').insert([{
-            name, version, description, file_url: fileUrl, icon_url: iconUrl,
-            download_count: 0, size: (appFile.size / (1024 * 1024)).toFixed(2) + ' MB',
+            name, version, description, file_url, icon_url,
+            download_count: 0, size: size || 'Unknown',
             user_id: req.user.role === 'admin' ? null : req.user.id
         }]);
+        
         if (dbError) throw dbError;
 
-        res.status(201).json({ message: 'App uploaded successfully' });
+        res.status(201).json({ message: 'App record created successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
