@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Download, Calendar, Mail, LayoutGrid, LogOut, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
+import ConfirmModal from '../components/ConfirmModal';
 
 const UserDashboard = () => {
   const { user, token, logout } = useAuth();
@@ -10,6 +11,7 @@ const UserDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,6 +35,7 @@ const UserDashboard = () => {
   }, [token]);
 
   const handleLogout = () => { logout(); navigate('/'); };
+  const confirmLogout = () => setShowLogoutModal(true);
 
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -48,7 +51,7 @@ const UserDashboard = () => {
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Welcome back, {user?.name}!</p>
         </div>
-        <button onClick={handleLogout} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+        <button onClick={confirmLogout} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
           <LogOut size={18} /> Logout
         </button>
       </div>
@@ -109,6 +112,17 @@ const UserDashboard = () => {
           ))}
         </div>
       )}
+      {/* Logout Confirmation */}
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        title="Logout?"
+        message="Are you sure you want to log out from CStore?"
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutModal(false)}
+        type="danger"
+        confirmText="Yes, Logout"
+        cancelText="Stay"
+      />
     </div>
   );
 };
