@@ -117,9 +117,9 @@ const AdminUpload = () => {
             />
           </div>
           <div className="form-group">
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Size (e.g., 93 MB)</label>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Size (e.g., 750 MB)</label>
             <input 
-              type="text" name="size" placeholder="93.45 MB" value={formData.size} onChange={handleInputChange} 
+              type="text" name="size" placeholder="750 MB" value={formData.size} onChange={handleInputChange} 
               style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '8px', color: 'white' }}
             />
           </div>
