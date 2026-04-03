@@ -15,6 +15,23 @@ const Home = () => {
     fetchApps();
   }, []);
 
+  const getDirectDownloadUrl = (url) => {
+    if (!url) return '';
+    if (url.includes('drive.google.com')) {
+      // Handle /file/d/ID/view format
+      const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch && fileIdMatch[1]) {
+        return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+      }
+      // Handle ?id=ID format
+      const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (idMatch && idMatch[1]) {
+        return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
+      }
+    }
+    return url; // Return original if not Google Drive or not matching
+  };
+
   const fetchApps = async () => {
     try {
       const response = await fetch(`${config.API_BASE_URL}/apps`);
@@ -35,7 +52,8 @@ const Home = () => {
   const handleDownload = async (id, fileUrl) => {
     try {
       await fetch(`${config.API_BASE_URL}/download/${id}`, { method: 'PUT' });
-      window.open(fileUrl, '_blank');
+      const directUrl = getDirectDownloadUrl(fileUrl);
+      window.open(directUrl, '_blank');
       fetchApps();
     } catch (err) {
       console.error('Error tracking download:', err);

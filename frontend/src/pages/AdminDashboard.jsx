@@ -1,3 +1,6 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 import {
   Users, Package, Download, Trash2, Upload, LogOut, LayoutGrid,
   ShieldCheck, AlertCircle, CheckCircle, Loader2, RefreshCw, File, Image as ImageIcon,
@@ -21,8 +24,8 @@ const AdminDashboard = () => {
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
 
   // Upload form state
-  const [formData, setFormData] = useState({ name: '', version: '', description: '' });
-  const [files, setFiles] = useState({ app: null, icon: null });
+  const [formData, setFormData] = useState({ name: '', version: '', description: '', file_url: '', size: '' });
+  const [files, setFiles] = useState({ icon: null });
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -101,20 +104,41 @@ const AdminDashboard = () => {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!files.app) return setActionStatus({ loading: false, success: null, error: 'App file required!' });
+    if (!formData.file_url) return setActionStatus({ loading: false, success: null, error: 'App link required!' });
     setActionStatus({ loading: true, success: null, error: null });
-    const data = new FormData();
-    data.append('name', formData.name);
-    data.append('version', formData.version);
-    data.append('description', formData.description);
-    data.append('file', files.app);
-    if (files.icon) data.append('icon', files.icon);
+
     try {
-      const res = await fetch(`${config.API_BASE_URL}/upload`, { method: 'POST', headers, body: data });
+      // 1. Upload Icon to Supabase (Optional)
+      let iconUrl = null;
+      if (files.icon) {
+        const iconFileName = `${Date.now()}-${files.icon.name}`;
+        const { error: iconError } = await supabase.storage
+          .from('cstore-icons')
+          .upload(iconFileName, files.icon);
+        
+        if (iconError) throw iconError;
+
+        const { data: { publicUrl: iconPublicUrl } } = supabase.storage
+          .from('cstore-icons')
+          .getPublicUrl(iconFileName);
+        iconUrl = iconPublicUrl;
+      }
+
+      // 2. Send metadata to backend
+      const res = await fetch(`${config.API_BASE_URL}/upload`, { 
+        method: 'POST', 
+        headers: { ...headers, 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({
+          ...formData,
+          icon_url: iconUrl,
+          size: formData.size || 'Unknown'
+        })
+      });
+
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      setActionStatus({ loading: false, success: 'App uploaded successfully!', error: null });
-      setFormData({ name: '', version: '', description: '' });
-      setFiles({ app: null, icon: null });
+      setActionStatus({ loading: false, success: 'App published successfully!', error: null });
+      setFormData({ name: '', version: '', description: '', file_url: '', size: '' });
+      setFiles({ icon: null });
       fetchAll();
     } catch (err) {
       setActionStatus({ loading: false, success: null, error: err.message });
@@ -365,25 +389,25 @@ const AdminDashboard = () => {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-              {/* App File */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>App File (APK/IPA) *</label>
-                <div style={{ background: 'rgba(99,102,241,0.05)', border: '2px dashed var(--primary)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
-                  <input type="file" accept=".apk,.ipa,.exe,.dmg,.zip" required onChange={e => setFiles({ ...files, app: e.target.files[0] })}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                  <File size={28} color="var(--primary)" style={{ marginBottom: '0.5rem' }} />
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{files.app ? files.app.name : 'Click to select'}</p>
-                </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>App Link (G-Drive/Direct) *</label>
+                <input type="url" required placeholder="https://drive.google.com/..." value={formData.file_url} onChange={e => setFormData({ ...formData, file_url: e.target.value })}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none' }} />
               </div>
-              {/* Icon File */}
-              <div style={{ position: 'relative' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Icon (Optional)</label>
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
-                  <input type="file" accept="image/*" onChange={e => setFiles({ ...files, icon: e.target.files[0] })}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                  <ImageIcon size={28} color="var(--text-muted)" style={{ marginBottom: '0.5rem' }} />
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{files.icon ? files.icon.name : 'Click to select'}</p>
-                </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>App Size (e.g. 750 MB)</label>
+                <input type="text" placeholder="750 MB" value={formData.size} onChange={e => setFormData({ ...formData, size: e.target.value })}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none' }} />
+              </div>
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Icon (Optional)</label>
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
+                <input type="file" accept="image/*" onChange={e => setFiles({ ...files, icon: e.target.files[0] })}
+                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <ImageIcon size={28} color="var(--text-muted)" style={{ marginBottom: '0.5rem' }} />
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{files.icon ? files.icon.name : 'Click to select image'}</p>
               </div>
             </div>
 
