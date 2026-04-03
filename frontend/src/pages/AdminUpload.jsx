@@ -7,8 +7,8 @@ import { useAuth } from '../context/AuthContext';
 
 const AdminUpload = () => {
   const { token } = useAuth();
-  const [formData, setFormData] = useState({ name: '', version: '', description: '' });
-  const [files, setFiles] = useState({ app: null, icon: null });
+  const [formData, setFormData] = useState({ name: '', version: '', description: '', file_url: '', size: '' });
+  const [files, setFiles] = useState({ icon: null });
   const [status, setStatus] = useState({ loading: false, success: false, error: null });
   const navigate = useNavigate();
 
@@ -22,22 +22,13 @@ const AdminUpload = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!files.app) return setStatus({ ...status, error: 'App file is required!' });
+    if (!formData.file_url) return setStatus({ ...status, error: 'Download link is required!' });
 
     setStatus({ loading: true, success: false, error: null });
 
     try {
-      // 1. Upload APK to Supabase
-      const appFileName = `${Date.now()}-${files.app.name}`;
-      const { data: appData, error: appError } = await supabase.storage
-        .from('cstore-apps')
-        .upload(appFileName, files.app);
-      
-      if (appError) throw appError;
-
-      const { data: { publicUrl: fileUrl } } = supabase.storage
-        .from('cstore-apps')
-        .getPublicUrl(appFileName);
+      // 1. App URL is already in formData.file_url
+      const fileUrl = formData.file_url;
 
       // 2. Upload Icon to Supabase (Optional)
       let iconUrl = null;
@@ -68,7 +59,7 @@ const AdminUpload = () => {
           description: formData.description,
           file_url: fileUrl,
           icon_url: iconUrl,
-          size: (files.app.size / (1024 * 1024)).toFixed(2) + ' MB'
+          size: formData.size || 'Unknown'
         }),
       });
 
@@ -118,21 +109,28 @@ const AdminUpload = () => {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          <div className="file-upload" style={{ position: 'relative' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Select File (APK/IPA) *</label>
-            <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '2px dashed var(--primary)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer' }}>
-                <input type="file" name="app" accept=".apk,.ipa,.exe,.dmg,.zip" required onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                <File size={32} style={{ color: 'var(--primary)', marginBottom: '0.5rem' }} />
-                <p style={{ fontSize: '0.85rem' }}>{files.app ? files.app.name : 'Click to select app file'}</p>
-            </div>
+          <div className="form-group">
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Link (G-Drive/Direct) *</label>
+            <input 
+              type="url" name="file_url" required placeholder="https://drive.google.com/..." value={formData.file_url} onChange={handleInputChange} 
+              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '8px', color: 'white' }}
+            />
           </div>
-          <div className="file-upload" style={{ position: 'relative' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Select Icon (Optional)</label>
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer' }}>
-                <input type="file" name="icon" accept="image/*" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                <ImageIcon size={32} style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }} />
-                <p style={{ fontSize: '0.85rem' }}>{files.icon ? files.icon.name : 'Click to select icon image'}</p>
-            </div>
+          <div className="form-group">
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Size (e.g., 93 MB)</label>
+            <input 
+              type="text" name="size" placeholder="93.45 MB" value={formData.size} onChange={handleInputChange} 
+              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '8px', color: 'white' }}
+            />
+          </div>
+        </div>
+
+        <div className="file-upload" style={{ position: 'relative' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Select Icon (Optional)</label>
+          <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer' }}>
+            <input type="file" name="icon" accept="image/*" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+            <ImageIcon size={32} style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }} />
+            <p style={{ fontSize: '0.85rem' }}>{files.icon ? files.icon.name : 'Click to select icon image'}</p>
           </div>
         </div>
 

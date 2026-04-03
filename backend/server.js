@@ -27,6 +27,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Multer Setup (Memory Storage)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -264,8 +265,10 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
 // Upload New App (Authenticated users)
 app.post('/api/upload', authenticateUser, async (req, res) => {
     try {
-        const { name, version, description, file_url, icon_url, size } = req.body;
+        console.log('DEBUG: Received Body:', req.body);
+        const { name, version, description, file_url, icon_url, size } = req.body || {};
 
+        if (!name) return res.status(400).json({ error: 'App name is required in request body' });
         if (!file_url) return res.status(400).json({ error: 'App file URL is required' });
 
         // Insert Metadata with UserID
