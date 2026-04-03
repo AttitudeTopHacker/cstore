@@ -9,7 +9,7 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   useEffect(() => {
     fetchApps();
@@ -51,7 +51,10 @@ const Home = () => {
 
   const handleDownload = async (id, fileUrl) => {
     try {
-      await fetch(`${config.API_BASE_URL}/download/${id}`, { method: 'PUT' });
+      await fetch(`${config.API_BASE_URL}/download/${id}`, { 
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       const directUrl = getDirectDownloadUrl(fileUrl);
       window.open(directUrl, '_blank');
       fetchApps();
