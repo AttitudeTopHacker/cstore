@@ -21,6 +21,7 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionStatus, setActionStatus] = useState({ loading: false, success: null, error: null });
+  const [fetchError, setFetchError] = useState(null);
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
 
   // Upload form state
@@ -37,10 +38,22 @@ const AdminDashboard = () => {
         fetch(`${config.API_BASE_URL}/apps`),
         fetch(`${config.API_BASE_URL}/admin/users`, { headers }),
       ]);
-      setStats(await statsRes.json());
-      setApps(await appsRes.json());
-      setUsers(await usersRes.json());
-    } catch (err) { console.error(err); }
+
+      const statsData = await statsRes.json();
+      const appsData = await appsRes.json();
+      const usersData = await usersRes.json();
+
+      if (statsRes.ok) setStats(statsData);
+      if (appsRes.ok && Array.isArray(appsData)) setApps(appsData);
+      if (usersRes.ok && Array.isArray(usersData)) setUsers(usersData);
+      
+      if (!statsRes.ok || !appsRes.ok || !usersRes.ok) {
+        setFetchError(`Server Error: ${statsRes.status} | ${appsRes.status} | ${usersRes.status}`);
+      }
+    } catch (err) { 
+      console.error('Fetch error:', err);
+      setFetchError(`Network Error: ${err.message}. Please check your internet connection or backend status.`);
+    }
     setLoading(false);
   };
 
@@ -197,7 +210,15 @@ const AdminDashboard = () => {
           <div style={{ textAlign: 'center' }}>
             <Loader2 size={40} className="animate-spin" style={{ marginBottom: '1rem', color: 'var(--primary)' }} />
             <p>Loading Dashboard...</p>
+            <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.6 }}>Connecting to: {config.API_BASE_URL}</p>
           </div>
+        </div>
+      ) : fetchError ? (
+        <div className="glass" style={{ padding: '3rem', textAlign: 'center', margin: '2rem 0', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <AlertCircle size={48} color="#ef4444" style={{ marginBottom: '1rem' }} />
+          <h3 style={{ color: '#ef4444', marginBottom: '0.5rem' }}>Failed to Load Dashboard</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{fetchError}</p>
+          <button onClick={fetchAll} className="btn-primary">Try Again</button>
         </div>
       ) : (
         <>
