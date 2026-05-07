@@ -5,8 +5,9 @@ const config: CapacitorConfig = {
   appName: 'CStore',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
-    hostname: 'willowy-cheesecake-d05a89.netlify.app'
+    androidScheme: 'https'
+    // hostname removed: app now loads from local dist/ bundle inside APK
+    // This prevents WebView from caching old remote JS files
   }
 };
 
