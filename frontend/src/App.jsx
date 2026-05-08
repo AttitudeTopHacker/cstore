@@ -42,6 +42,8 @@ function App() {
               </ProtectedRoute>
             } />
           </Routes>
+          {/* Bottom Spacer for Mobile */}
+          <div className="mobile-only" style={{ height: '140px' }} />
         </main>
         <BottomNavbar />
       </div>

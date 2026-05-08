@@ -10,6 +10,7 @@
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --premium-gradient: linear-gradient(135deg, #fceabb 0%, #f8b500 50%, #fceabb 100%);
   --glow-primary: 0 0 20px rgba(99, 102, 241, 0.4);
 }
 
@@ -48,8 +49,6 @@ body {
   max-width: 1240px;
   margin: 0 auto;
   padding: 0 2rem;
-  position: relative;
-  z-index: 10;
 }
 
 .flex-center {
@@ -69,10 +68,9 @@ body {
 }
 
 .glass:hover {
-  border-color: var(--glass-highlight);
-  background: rgba(255, 255, 255, 0.05);
-  transform: translateY(-6px) scale(1.01);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
 }
 
 .btn-primary {
@@ -161,19 +159,18 @@ nav {
   height: 80px;
   display: flex;
   align-items: center;
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  width: 100%;
   z-index: 1000;
-  background: rgba(2, 6, 23, 0.98);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 2rem;
 }
 
 .App {
-  padding-top: 80px;
+  min-height: 100vh;
 }
 
 .logo {
@@ -181,6 +178,31 @@ nav {
   font-weight: 700;
   color: white;
   letter-spacing: -0.02em;
+  transition: all 0.3s ease;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 8px rgba(248, 181, 0, 0.4));
+  transform: scale(1.02);
+}
+
+.text-premium {
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  background: var(--premium-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background-size: 200% auto;
+  animation: shine 3s linear infinite;
+  border: 1px solid rgba(248, 181, 0, 0.2);
+  text-transform: uppercase;
+}
+
+@keyframes shine {
+  to { background-position: 200% center; }
 }
 
 /* Bottom Nav for Mobile */
@@ -231,9 +253,10 @@ nav {
 @media (max-width: 768px) {
   .desktop-only { display: none !important; }
   .mobile-only { display: flex !important; }
-  .container { padding: 0 1rem 120px 1rem; }
+  .container { padding: 0 1rem; }
   nav { height: 70px; padding: 0 1rem; }
-  .grid-apps { grid-template-columns: 1fr; }
+  .App { padding-top: 0; }
+  .grid-apps { grid-template-columns: 1fr; padding-bottom: 8rem; }
 }
 
 /* Safe areas for Android/iOS */

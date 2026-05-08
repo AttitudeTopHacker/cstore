@@ -100,7 +100,22 @@ const Home = () => {
 
     } catch (err) {
       console.error('Download failed:', err);
-      setModal(prev => ({ ...prev, status: 'error', error: err.message }));
+      
+      if (err.message === 'DOWNLOAD_BLOCKED') {
+        setModal(prev => ({ 
+          ...prev, 
+          status: 'error', 
+          error: 'Google Drive is asking for a virus scan confirmation. Opening in browser so you can click "Download anyway".' 
+        }));
+        
+        // Wait a bit so user can read, then open browser
+        setTimeout(async () => {
+          await Browser.open({ url: DownloadManager.getDirectLink(file_url) });
+          setModal(prev => ({ ...prev, isOpen: false }));
+        }, 3000);
+      } else {
+        setModal(prev => ({ ...prev, status: 'error', error: err.message }));
+      }
     }
   };
 

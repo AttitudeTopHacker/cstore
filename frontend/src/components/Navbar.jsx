@@ -16,8 +16,9 @@ const Navbar = () => {
     <nav>
       <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
         {/* Logo */}
-        <Link to="/" className="logo" style={{ textDecoration: 'none' }}>
-          CStore <span style={{ fontWeight: 300, fontSize: '0.9rem', color: '#94a3b8' }}>PREMIUM</span>
+        <Link to="/" className="logo" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ color: 'white' }}>CStore</span> 
+          <span className="text-premium">PREMIUM</span>
         </Link>
 
         {/* Nav Links - Desktop Only */}

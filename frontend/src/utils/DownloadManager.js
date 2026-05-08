@@ -5,14 +5,24 @@ import { Capacitor } from '@capacitor/core';
 
 export const DownloadManager = {
   /**
+   * Helper to convert Google Drive links to direct download links
+   */
+  getDirectLink: (url) => {
+    if (url.includes('drive.google.com')) {
+      const idMatch = url.match(/[-\w]{25,}/);
+      if (idMatch) {
+        return `https://drive.google.com/uc?export=download&id=${idMatch[0]}`;
+      }
+    }
+    return url;
+  },
+
+  /**
    * Downloads a file and saves it to the device storage.
-   * @param {string} url - The URL of the file to download
-   * @param {string} fileName - The name to save the file as
-   * @param {Function} onProgress - Callback for progress updates (0-100)
-   * @returns {Promise<string>} - The URI of the saved file
    */
   downloadFile: async (url, fileName, onProgress) => {
     try {
+      const directUrl = DownloadManager.getDirectLink(url);
       const folderPath = 'Download/cstore';
       const fullPath = `${folderPath}/${fileName}`;
       
@@ -36,24 +46,26 @@ export const DownloadManager = {
 
       // 3. Download
       const downloadResult = await Filesystem.downloadFile({
-        url: url,
+        url: directUrl,
         path: fullPath,
         directory: Directory.ExternalStorage
       });
 
       // 4. Verify file exists and has size
-      await new Promise(r => setTimeout(r, 800));
+      // Wait a bit for filesystem to sync
+      await new Promise(r => setTimeout(r, 1000));
+      
       const stat = await Filesystem.stat({
         path: fullPath,
         directory: Directory.ExternalStorage
       });
 
-      if (stat.size < 1000000) { // Less than 1MB is likely a warning page
-         console.warn('File too small for an APK. Size:', stat.size);
-         throw new Error('Google Drive blocked the download (Virus Scan Warning). Please try again.');
+      // If file is very small (less than 100KB), it's likely an HTML error page or virus scan warning
+      if (stat.size < 100000) { 
+          console.warn('File too small for an APK. Size:', stat.size);
+          throw new Error('DOWNLOAD_BLOCKED');
       }
       
-      // Filesystem.downloadFile returns { path: string }
       return downloadResult.path;
     } catch (error) {
       console.error('Download Manager Error:', error);
