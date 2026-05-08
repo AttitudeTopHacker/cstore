@@ -108,9 +108,8 @@ const ProgressModal = ({
           {/* Progress Bar Container */}
           {(status === 'active' || status === 'success') && (
             <div style={{ marginBottom: '2rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.9rem', fontWeight: 600 }}>
+              <div style={{ textAlign: 'center', marginBottom: '0.75rem', fontSize: '1.2rem', fontWeight: 700 }}>
                 <span style={{ color: accentColor }}>{progress}%</span>
-                <span style={{ color: 'var(--text-muted)' }}>{status === 'success' ? '100%' : 'Processing...'}</span>
               </div>
               <div style={{
                 height: '10px',
