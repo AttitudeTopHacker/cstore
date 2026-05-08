@@ -130,7 +130,7 @@ const Home = () => {
   }
 
   return (
-    <div className="fade-in">
+    <div className="fade-in" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 80px)' }}>
       {/* Hero Section */}
       <section style={{ textAlign: 'center', padding: '6rem 0 4rem' }}>
         <h1 style={{ 
@@ -166,10 +166,35 @@ const Home = () => {
           <h2 style={{ fontSize: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
             <LayoutGrid size={24} style={{ color: 'var(--primary)' }} /> Trending Now
           </h2>
-          <button onClick={() => navigate(user ? '/upload' : '/login')} className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.95rem' }}>
-            {user ? <><Plus size={18} /> Upload New</> : <><LogIn size={18} /> Sign In</>}
+          <button onClick={() => navigate(isLoggedIn ? '/upload' : '/login')} className="btn-primary desktop-only" style={{ padding: '10px 24px', fontSize: '0.95rem' }}>
+            {isLoggedIn ? <><Plus size={18} /> Upload New</> : <><LogIn size={18} /> Sign In</>}
           </button>
         </div>
+
+        {/* Mobile Floating Action Button */}
+        <button 
+          className="mobile-only"
+          onClick={() => navigate(isLoggedIn ? '/upload' : '/login')}
+          style={{
+            position: 'fixed',
+            right: '20px',
+            bottom: '90px',
+            width: '60px',
+            height: '60px',
+            borderRadius: '30px',
+            background: 'var(--accent-gradient)',
+            color: 'white',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.5)',
+            zIndex: 900,
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+        >
+          <Plus size={32} />
+        </button>
 
         {apps.length === 0 ? (
           <div className="glass" style={{ padding: '6rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>

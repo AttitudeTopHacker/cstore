@@ -26,6 +26,8 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
   min-height: 100vh;
+  overscroll-behavior: none;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .mesh-bg {
@@ -145,10 +147,85 @@ body {
 }
 
 /* Responsive */
+/* Nav Styles */
+nav {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 2rem;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -0.02em;
+}
+
+/* Bottom Nav for Mobile */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 70px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 1rem;
+  z-index: 1000;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav .nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.7rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  flex: 1;
+}
+
+.bottom-nav .nav-item.active {
+  color: var(--primary);
+}
+
+.bottom-nav .nav-item.active svg {
+  transform: translateY(-2px);
+  filter: drop-shadow(var(--glow-primary));
+}
+
+/* Responsive Utilities */
+.mobile-only { display: none; }
+.desktop-only { display: flex; }
+
 @media (max-width: 768px) {
-  .grid-apps { grid-template-columns: 1fr; }
-  .container { padding: 0 1.25rem; }
-  nav { padding: 0 1.25rem; }
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+  .container { padding: 0 1rem; }
+  nav { height: 70px; padding: 0 1rem; }
+  .grid-apps { grid-template-columns: 1fr; padding-bottom: 8rem; }
+}
+
+/* Safe areas for Android/iOS */
+body {
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 
