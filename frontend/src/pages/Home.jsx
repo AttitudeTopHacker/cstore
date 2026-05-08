@@ -122,9 +122,12 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="flex-center" style={{ height: '70vh', flexDirection: 'column', gap: '1.5rem' }}>
-        <div style={{ width: '48px', height: '48px', border: '4px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }} />
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: 500 }}>Initializing CStore...</p>
+      <div className="flex-center" style={{ height: '80vh', width: '100%', flexDirection: 'column', gap: '2rem', position: 'relative', zIndex: 100 }}>
+        <div style={{ width: '64px', height: '64px', border: '5px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite' }} />
+        <div className="flex-center" style={{ flexDirection: 'column', gap: '0.5rem' }}>
+          <h2 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 700 }}>Initializing CStore</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>Preparing your premium ecosystem...</p>
+        </div>
       </div>
     );
   }
