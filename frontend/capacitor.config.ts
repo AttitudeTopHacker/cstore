@@ -5,9 +5,14 @@ const config: CapacitorConfig = {
   appName: 'CStore',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
-    // hostname removed: app now loads from local dist/ bundle inside APK
-    // This prevents WebView from caching old remote JS files
+    androidScheme: 'https',
+    allowNavigation: ['drive.google.com', 'supabase.co', '*.supabase.co'],
+    cleartext: true
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true
+    }
   }
 };
 

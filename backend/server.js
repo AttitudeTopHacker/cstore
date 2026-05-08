@@ -266,21 +266,23 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
 app.post('/api/upload', authenticateUser, async (req, res) => {
     try {
         console.log('DEBUG: Received Body:', req.body);
-        const { name, version, description, file_url, icon_url, size } = req.body || {};
+        const { name, version, description, file_url, icon_url, size, is_chunked, chunk_count } = req.body || {};
 
         if (!name) return res.status(400).json({ error: 'App name is required in request body' });
         if (!file_url) return res.status(400).json({ error: 'App file URL is required' });
 
         // Insert Metadata with UserID
-        const { error: dbError } = await supabase.from('apps').insert([{
+        const { data: insertedApp, error: dbError } = await supabase.from('apps').insert([{
             name, version, description, file_url, icon_url,
             download_count: 0, size: size || 'Unknown',
+            is_chunked: is_chunked || false,
+            chunk_count: chunk_count || 1,
             user_id: req.user.role === 'admin' ? null : req.user.id
-        }]);
+        }]).select().single();
         
         if (dbError) throw dbError;
 
-        res.status(201).json({ message: 'App record created successfully' });
+        res.status(201).json({ message: 'App record created successfully', app: insertedApp, id: insertedApp.id });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

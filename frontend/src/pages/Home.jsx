@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Download, LayoutGrid, Database, Search, Plus, PackageOpen, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Browser } from '@capacitor/browser';
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
+import ProgressModal from '../components/ProgressModal';
+import { DownloadManager } from '../utils/DownloadManager';
+
 
 const Home = () => {
   const [apps, setApps] = useState([]);
@@ -10,27 +15,23 @@ const Home = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
   const { user, token } = useAuth();
+  
+  // Progress Modal State
+  const [modal, setModal] = useState({ isOpen: false, type: 'download', progress: 0, fileName: '', fileSize: '', status: 'active', error: '', url: '', id: '' });
+  
+  // Track downloaded apps
+  const [downloadedApps, setDownloadedApps] = useState(() => {
+    const saved = localStorage.getItem('downloaded_apps');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem('downloaded_apps', JSON.stringify(downloadedApps));
+  }, [downloadedApps]);
 
   useEffect(() => {
     fetchApps();
   }, []);
-
-  const getDirectDownloadUrl = (url) => {
-    if (!url) return '';
-    if (url.includes('drive.google.com')) {
-      // Handle /file/d/ID/view format
-      const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-      if (fileIdMatch && fileIdMatch[1]) {
-        return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
-      }
-      // Handle ?id=ID format
-      const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-      if (idMatch && idMatch[1]) {
-        return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
-      }
-    }
-    return url; // Return original if not Google Drive or not matching
-  };
 
   const fetchApps = async () => {
     try {
@@ -49,25 +50,68 @@ const Home = () => {
     }
   };
 
-  const handleDownload = async (id, fileUrl) => {
+  const handleDownload = async (app) => {
+    const { id, file_url, name, size } = app;
+    const fileName = `${name.replace(/\s+/g, '_')}_${app.version}.apk`;
+
+    setModal({
+      isOpen: true,
+      type: 'download',
+      progress: 0,
+      fileName: fileName,
+      fileSize: size,
+      status: 'active',
+      error: '',
+      url: file_url,
+      id: id
+    });
+
     try {
-      await fetch(`${config.API_BASE_URL}/download/${id}`, { 
+      // 1. Track download on server
+      fetch(`${config.API_BASE_URL}/download/${id}`, { 
         method: 'PUT',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
-      const directUrl = getDirectDownloadUrl(fileUrl);
-      window.open(directUrl, '_blank');
-      fetchApps();
+      }).catch(e => console.error('Tracking failed', e));
+
+      // 2. Download file
+      let path;
+      const isActuallyChunked = app.is_chunked || (app.file_url && app.file_url.includes('chunked_'));
+      
+      if (isActuallyChunked) {
+        const effectiveChunkCount = app.chunk_count > 1 ? app.chunk_count : 1; 
+        path = await DownloadManager.downloadChunkedFile(file_url, effectiveChunkCount, fileName, (prog) => {
+          setModal(prev => ({ ...prev, progress: prog }));
+        });
+      } else {
+        path = await DownloadManager.downloadFile(file_url, fileName, (prog) => {
+          setModal(prev => ({ ...prev, progress: prog }));
+        });
+      }
+
+      // 3. Success state
+      setModal(prev => ({ ...prev, status: 'success', progress: 100 }));
+      setDownloadedApps(prev => ({ ...prev, [id]: path }));
+
+      // 4. Auto-close and Install
+      setTimeout(() => setModal(prev => ({ ...prev, isOpen: false })), 1500);
+      setTimeout(async () => {
+        try { await DownloadManager.installApk(path); } catch (err) { console.error('Auto install failed:', err); }
+      }, 2000);
+
     } catch (err) {
-      console.error('Error tracking download:', err);
+      console.error('Download failed:', err);
+      setModal(prev => ({ ...prev, status: 'error', error: err.message }));
     }
   };
 
-  const handleUploadClick = () => {
-    if (user) {
-      navigate('/upload');
-    } else {
-      navigate('/login');
+  const handleOpenApp = async (id) => {
+    const path = downloadedApps[id];
+    if (path) {
+      try {
+        await DownloadManager.installApk(path);
+      } catch (err) {
+        console.error('Manual install failed:', err);
+      }
     }
   };
 
@@ -78,119 +122,131 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="flex-center" style={{ height: '70vh', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ color: 'var(--text-muted)' }}>Loading apps...</p>
+      <div className="flex-center" style={{ height: '70vh', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ width: '48px', height: '48px', border: '4px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite' }} />
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: 500 }}>Initializing CStore...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '2rem 0' }}>
-      <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '2rem' }}>
-        <div>
-          <h1 style={{ fontSize: '3.5rem', marginBottom: '1rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Explore Our Store
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', maxWidth: '600px' }}>
-            Discover the latest premium applications, uploaded directly to our high-speed servers.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <button onClick={handleUploadClick} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '12px 24px' }}>
-                {user ? <><Plus size={18} /> Upload App</> : <><LogIn size={18} /> Sign in to Upload</>}
-            </button>
-        </div>
-      </header>
-
-      {/* Search Bar - only show if there are apps */}
-      {apps.length > 0 && (
-        <div className="glass" style={{ marginBottom: '3rem', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Search size={20} style={{ color: 'var(--text-muted)' }} />
+    <div className="fade-in">
+      {/* Hero Section */}
+      <section style={{ textAlign: 'center', padding: '6rem 0 4rem' }}>
+        <h1 style={{ 
+          fontSize: 'clamp(2.5rem, 8vw, 4.5rem)', 
+          lineHeight: 1.1, 
+          marginBottom: '1.5rem',
+          background: 'linear-gradient(135deg, #fff 0%, #94a3b8 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
+        }}>
+          Premium App Ecosystem
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.25rem', maxWidth: '700px', margin: '0 auto 3rem', lineHeight: 1.6 }}>
+          Discover and install high-performance Android applications with seamless updates and zero-latency downloads.
+        </p>
+        
+        <div className="glass" style={{ maxWidth: '600px', margin: '0 auto', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
+          <Search size={22} style={{ color: 'var(--primary)' }} />
           <input 
               type="text" 
-              placeholder="Search for applications..." 
+              placeholder="Search apps, utilities, or games..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  outline: 'none', 
-                  color: 'white', 
-                  fontSize: '1.1rem', 
-                  width: '100%',
-                  fontFamily: 'inherit'
-              }} 
+              style={{ background: 'none', border: 'none', outline: 'none', color: 'white', fontSize: '1.1rem', width: '100%', fontWeight: 500 }} 
           />
         </div>
-      )}
+      </section>
 
-      {/* App Grid or Empty State */}
-      {apps.length === 0 ? (
-        /* Empty State - No apps at all */
-        <div className="glass" style={{ padding: '5rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
-          <div style={{ 
-            width: '100px', height: '100px', borderRadius: '50%', 
-            background: 'rgba(99, 102, 241, 0.1)', 
-            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            margin: '0 auto 2rem',
-            border: '2px dashed rgba(99, 102, 241, 0.3)'
-          }}>
-            <PackageOpen size={44} style={{ color: '#6366f1', opacity: 0.7 }} />
-          </div>
-          <h2 style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>No Apps Yet</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', marginBottom: '2rem', lineHeight: 1.6 }}>
-            The store is empty right now. Be the first one to upload an amazing app!
-          </p>
-          <button onClick={handleUploadClick} className="btn-primary" style={{ padding: '14px 32px', fontSize: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.6rem' }}>
-            {user ? <><Plus size={18} /> Upload First App</> : <><LogIn size={18} /> Sign in to Upload</>}
+      {/* Featured Apps Section */}
+      <div className="container">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+          <h2 style={{ fontSize: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+            <LayoutGrid size={24} style={{ color: 'var(--primary)' }} /> Trending Now
+          </h2>
+          <button onClick={() => navigate(user ? '/upload' : '/login')} className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.95rem' }}>
+            {user ? <><Plus size={18} /> Upload New</> : <><LogIn size={18} /> Sign In</>}
           </button>
         </div>
-      ) : (
-        <div className="grid-apps">
-          {filteredApps.length === 0 ? (
-            <div className="glass" style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center' }}>
-              <Search size={48} style={{ marginBottom: '1rem', opacity: 0.3 }} />
-              <h3 style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>No results found</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No apps matching "<strong>{searchTerm}</strong>". Try a different search term.</p>
-            </div>
-          ) : (
-            filteredApps.map((app) => (
-              <div key={app.id} className="glass" style={{ padding: '1.5rem', transition: 'all 0.3s' }}>
-                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '1.5rem' }}>
-                  <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>
-                      {app.icon_url ? <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <LayoutGrid size={32} style={{ margin: '16px' }} />}
+
+        {apps.length === 0 ? (
+          <div className="glass" style={{ padding: '6rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
+            <PackageOpen size={64} style={{ color: 'var(--primary)', opacity: 0.4, marginBottom: '2rem' }} />
+            <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Vault is Empty</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2.5rem' }}>Be the pioneer. Upload the first application to our growing ecosystem.</p>
+            <button onClick={() => navigate(user ? '/upload' : '/login')} className="btn-primary">Get Started</button>
+          </div>
+        ) : (
+          <div className="grid-apps">
+            {filteredApps.map((app) => (
+              <div key={app.id} className="glass" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '2rem' }}>
+                  <div style={{ 
+                    width: '72px', height: '72px', borderRadius: '20px', 
+                    background: 'rgba(255,255,255,0.03)', overflow: 'hidden',
+                    border: '1px solid var(--glass-border)',
+                    boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+                  }}>
+                      {app.icon_url ? <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <LayoutGrid size={32} style={{ margin: '20px', opacity: 0.5 }} />}
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1.25rem' }}>{app.name}</h3>
-                    <span style={{ fontSize: '0.85rem', color: '#6366f1', fontWeight: 600 }}>{app.version}</span>
+                    <h3 style={{ fontSize: '1.4rem', marginBottom: '0.2rem' }}>{app.name}</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 700 }}>{app.version}</span>
+                      <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{app.size}</span>
+                    </div>
                   </div>
                 </div>
                 
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', height: '3.6rem', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
-                  {app.description || 'No description provided for this application.'}
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2.5rem', height: '4.5rem', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', lineHeight: 1.6 }}>
+                  {app.description || 'Elevate your experience with this premium utility designed for modern Android devices.'}
                 </p>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <Download size={14} /> {app.download_count}
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <Database size={14} /> {app.size}
-                      </span>
+                <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Download size={16} /> {app.download_count}
+                    </span>
                   </div>
-                  <button onClick={() => handleDownload(app.id, app.file_url)} className="btn-primary" style={{ padding: '10px 20px', fontSize: '0.9rem' }}>
-                      Install Now
-                  </button>
+                  {downloadedApps[app.id] ? (
+                    <button onClick={() => handleOpenApp(app.id)} className="btn-primary" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)' }}>
+                        Open App
+                    </button>
+                  ) : (
+                    <button onClick={() => handleDownload(app)} className="btn-primary">
+                        Install Now
+                    </button>
+                  )}
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
+
+      <ProgressModal 
+        {...modal}
+        onCancel={() => setModal({ ...modal, status: 'cancelled' })}
+        onRetry={() => handleDownload(apps.find(a => a.id === modal.id))}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+      />
     </div>
   );
 };
+
+      {/* Progress Modal */}
+      <ProgressModal 
+        {...modal}
+        onCancel={() => setModal({ ...modal, status: 'cancelled' })}
+        onRetry={() => handleDownload(apps.find(a => a.id === modal.id))}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+      />
+    </div>
+  );
+};
+
 
 export default Home;
