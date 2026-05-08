@@ -17,6 +17,10 @@ export const AuthProvider = ({ children }) => {
   // ─── Helper: sync supabase user with our backend ───────────────────────────
   const syncUserWithBackend = async (supabaseUser) => {
     try {
+      // Timeout after 20s to handle Render cold starts
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
       const res = await fetch(`${config.API_BASE_URL}/auth/google-sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -25,7 +29,10 @@ export const AuthProvider = ({ children }) => {
           name: supabaseUser.user_metadata?.full_name || supabaseUser.email,
           supabase_id: supabaseUser.id,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -41,16 +48,19 @@ export const AuthProvider = ({ children }) => {
       }
       return data;
     } catch (err) {
-      console.error('Backend sync failed:', err);
+      console.error('Backend sync failed:', err.message);
+      // Don't throw — allow app to keep loading even if sync fails
     }
   };
 
   // ─── Internal login setter ──────────────────────────────────────────────────
   const _setLogin = (userData, tokenData) => {
-    setUser(userData);
-    setToken(tokenData);
+    // Save to localStorage first so it's available on re-mount
     localStorage.setItem('cstore_token', tokenData);
     localStorage.setItem('cstore_user', JSON.stringify(userData));
+    // Then update React state (both in same render batch)
+    setUser(userData);
+    setToken(tokenData);
   };
 
   // ─── Init: load stored session + check supabase session ────────────────────

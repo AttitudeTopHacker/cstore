@@ -45,8 +45,10 @@ const Login = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      // login() sets React state + localStorage
+      // The useEffect above will detect isLoggedIn=true and navigate
       login(data.user, data.token);
-      navigate(data.user.role === 'admin' ? '/admin' : '/dashboard');
+      setStatus({ loading: false, error: null });
     } catch (err) {
       setStatus({ loading: false, error: err.message });
     }
