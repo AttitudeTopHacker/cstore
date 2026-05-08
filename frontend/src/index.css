@@ -217,9 +217,9 @@ nav {
 @media (max-width: 768px) {
   .desktop-only { display: none !important; }
   .mobile-only { display: flex !important; }
-  .container { padding: 0 1rem; }
+  .container { padding: 0 1rem 120px 1rem; }
   nav { height: 70px; padding: 0 1rem; }
-  .grid-apps { grid-template-columns: 1fr; padding-bottom: 8rem; }
+  .grid-apps { grid-template-columns: 1fr; }
 }
 
 /* Safe areas for Android/iOS */

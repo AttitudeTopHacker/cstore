@@ -130,7 +130,7 @@ const Home = () => {
   }
 
   return (
-    <div className="fade-in" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 80px)' }}>
+    <div className="fade-in" style={{ paddingBottom: '120px' }}>
       {/* Hero Section */}
       <section style={{ textAlign: 'center', padding: '6rem 0 4rem' }}>
         <h1 style={{ 
