@@ -237,16 +237,4 @@ const Home = () => {
   );
 };
 
-      {/* Progress Modal */}
-      <ProgressModal 
-        {...modal}
-        onCancel={() => setModal({ ...modal, status: 'cancelled' })}
-        onRetry={() => handleDownload(apps.find(a => a.id === modal.id))}
-        onClose={() => setModal({ ...modal, isOpen: false })}
-      />
-    </div>
-  );
-};
-
-
 export default Home;

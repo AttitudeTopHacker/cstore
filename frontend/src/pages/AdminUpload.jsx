@@ -9,7 +9,7 @@ import ProgressModal from '../components/ProgressModal';
 
 const AdminUpload = () => {
   const { token } = useAuth();
-  const [formData, setFormData] = useState({ name: '', version: '', description: '', file_url: '', size: '' });
+  const [formData, setFormData] = useState({ name: '', version: '', description: '', size: '' });
   const [files, setFiles] = useState({ icon: null, apk: null });
   const [status, setStatus] = useState({ loading: false, success: false, error: null });
   const [modal, setModal] = useState({ isOpen: false, type: 'upload', progress: 0, fileName: '', fileSize: '', status: 'active', error: '' });
@@ -26,7 +26,7 @@ const AdminUpload = () => {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       
       if (parseFloat(sizeMB) > 500) {
-        alert(`This file is ${sizeMB}MB. For files over 500MB, please use a Drive link instead.`);
+        alert(`This file is ${sizeMB}MB. Our server supports up to 500MB via chunked upload.`);
         setFiles({ ...files, apk: null });
         return;
       }
@@ -43,14 +43,14 @@ const AdminUpload = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!files.apk && !formData.file_url) return setStatus({ ...status, error: 'Please select an APK file or provide a download link!' });
+    if (!files.apk) return setStatus({ ...status, error: 'Please select an APK file to upload!' });
 
     setStatus({ loading: true, success: false, error: null });
 
 
     
     try {
-      let finalFileUrl = formData.file_url;
+      let finalFileUrl = '';
       let isChunked = false;
       let chunkCount = 1;
 
@@ -207,32 +207,66 @@ const AdminUpload = () => {
         </div>
 
         <div className="form-group">
-          <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Upload APK File *</label>
-          <div style={{ position: 'relative' }}>
-            <div style={{ 
+          <label style={{ display: 'block', marginBottom: '0.8rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>Application APK File *</label>
+          <div 
+            className="glass"
+            style={{ 
+              position: 'relative',
               background: 'rgba(255,255,255,0.02)', 
               border: '2px dashed var(--glass-border)', 
-              borderRadius: '20px', 
-              padding: '3rem 2rem', 
+              borderRadius: '24px', 
+              padding: '4rem 2rem', 
               textAlign: 'center', 
               cursor: 'pointer',
-              transition: 'all 0.3s ease'
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              overflow: 'hidden'
             }}
-            onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
-            onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--glass-border)'}
-            >
-              <input type="file" name="apk" accept=".apk" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-              <div style={{ 
-                width: '64px', height: '64px', borderRadius: '50%', 
-                background: 'rgba(99, 102, 241, 0.1)', 
-                display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                margin: '0 auto 1.5rem' 
-              }}>
-                <File size={32} style={{ color: 'var(--primary)' }} />
-              </div>
-              <h4 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>{files.apk ? files.apk.name : 'Drop your APK here'}</h4>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{files.apk ? `Size: ${formData.size}` : 'Maximum file size: 500MB'}</p>
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)'; }}
+            onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+            onDrop={(e) => { 
+              e.preventDefault(); 
+              e.currentTarget.style.borderColor = 'var(--glass-border)'; 
+              e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+              const file = e.dataTransfer.files[0];
+              if (file && file.name.endsWith('.apk')) {
+                handleFileChange({ target: { name: 'apk', files: [file] } });
+              } else {
+                alert('Please drop a valid .apk file');
+              }
+            }}
+          >
+            <input 
+              type="file" name="apk" accept=".apk" onChange={handleFileChange} 
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 2 }} 
+            />
+            <div style={{ 
+              width: '80px', height: '80px', borderRadius: '50%', 
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              margin: '0 auto 2rem',
+              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.2)'
+            }}>
+              <File size={40} style={{ color: 'var(--primary)' }} />
             </div>
+            <h4 style={{ fontSize: '1.25rem', marginBottom: '0.75rem', fontWeight: 700 }}>
+              {files.apk ? files.apk.name : 'Pick or Drag APK here'}
+            </h4>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '300px', margin: '0 auto' }}>
+              {files.apk ? `Detected Size: ${formData.size}` : 'Supports large files up to 500MB via fast chunked upload'}
+            </p>
+            
+            {/* Pulsing effect when file selected */}
+            {files.apk && (
+              <div style={{ 
+                position: 'absolute', bottom: '1rem', right: '1rem', 
+                background: 'rgba(16, 185, 129, 0.1)', color: '#10b981',
+                padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem',
+                fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem',
+                border: '1px solid rgba(16, 185, 129, 0.2)'
+              }}>
+                <CheckCircle size={14} /> Ready to Publish
+              </div>
+            )}
           </div>
         </div>
 

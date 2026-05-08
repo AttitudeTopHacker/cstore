@@ -25,8 +25,8 @@ const AdminDashboard = () => {
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
 
   // Upload form state
-  const [formData, setFormData] = useState({ name: '', version: '', description: '', file_url: '', size: '' });
-  const [files, setFiles] = useState({ icon: null });
+  const [formData, setFormData] = useState({ name: '', version: '', description: '', size: '' });
+  const [files, setFiles] = useState({ icon: null, apk: null });
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -117,44 +117,63 @@ const AdminDashboard = () => {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!formData.file_url) return setActionStatus({ loading: false, success: null, error: 'App link required!' });
+    if (!files.apk) return setActionStatus({ loading: false, success: null, error: 'Please select an APK file!' });
     setActionStatus({ loading: true, success: null, error: null });
 
     try {
-      // 1. Upload Icon to Supabase (Optional)
+      let finalFileUrl = '';
+      
+      // 1. Upload Icon (Optional)
       let iconUrl = null;
       if (files.icon) {
-        const iconFileName = `${Date.now()}-${files.icon.name}`;
-        const { error: iconError } = await supabase.storage
-          .from('cstore-icons')
-          .upload(iconFileName, files.icon);
-        
+        const iconFileName = `${Date.now()}-${files.icon.name.replace(/\s+/g, '_')}`;
+        const { error: iconError } = await supabase.storage.from('cstore-icons').upload(iconFileName, files.icon);
         if (iconError) throw iconError;
-
-        const { data: { publicUrl: iconPublicUrl } } = supabase.storage
-          .from('cstore-icons')
-          .getPublicUrl(iconFileName);
-        iconUrl = iconPublicUrl;
+        const { data: { publicUrl } } = supabase.storage.from('cstore-icons').getPublicUrl(iconFileName);
+        iconUrl = publicUrl;
       }
 
-      // 2. Send metadata to backend
+      // 2. Upload APK
+      const apkFileName = `${Date.now()}-${files.apk.name.replace(/\s+/g, '_')}`;
+      const { error: apkError } = await supabase.storage.from('cstore-apps').upload(apkFileName, files.apk);
+      if (apkError) throw apkError;
+      const { data: { publicUrl: apkPublicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(apkFileName);
+      finalFileUrl = apkPublicUrl;
+
+      // 3. Send metadata to backend
       const res = await fetch(`${config.API_BASE_URL}/upload`, { 
         method: 'POST', 
         headers: { ...headers, 'Content-Type': 'application/json' }, 
         body: JSON.stringify({
-          ...formData,
+          name: formData.name,
+          version: formData.version,
+          description: formData.description,
+          file_url: finalFileUrl,
           icon_url: iconUrl,
-          size: formData.size || 'Unknown'
+          size: formData.size || 'Unknown',
+          is_chunked: false,
+          chunk_count: 1
         })
       });
 
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setActionStatus({ loading: false, success: 'App published successfully!', error: null });
-      setFormData({ name: '', version: '', description: '', file_url: '', size: '' });
-      setFiles({ icon: null });
+      setFormData({ name: '', version: '', description: '', size: '' });
+      setFiles({ icon: null, apk: null });
       fetchAll();
     } catch (err) {
       setActionStatus({ loading: false, success: null, error: err.message });
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (e.target.name === 'apk' && file) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setFormData(prev => ({ ...prev, size: `${sizeMB} MB` }));
+      setFiles({ ...files, apk: file });
+    } else {
+      setFiles({ ...files, [e.target.name]: file });
     }
   };
 
@@ -388,47 +407,67 @@ const AdminDashboard = () => {
 
       {/* ── UPLOAD TAB ── */}
       {activeTab === TAB.UPLOAD && (
-        <div style={{ maxWidth: '720px' }}>
-          <form onSubmit={handleUpload} className="glass" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+        <div style={{ maxWidth: '800px' }}>
+          <form onSubmit={handleUpload} className="glass" style={{ padding: '3rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>App Name *</label>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Name *</label>
                 <input type="text" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Version (e.g. v1.0.0)</label>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Version (e.g. v1.0.0)</label>
                 <input type="text" value={formData.version} onChange={e => setFormData({ ...formData, version: e.target.value })}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none' }} />
               </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Description</label>
-              <textarea rows="3" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Description</label>
+              <textarea rows="4" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
                 style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none', resize: 'none', fontFamily: 'inherit' }} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>App Link (G-Drive/Direct) *</label>
-                <input type="url" required placeholder="https://drive.google.com/..." value={formData.file_url} onChange={e => setFormData({ ...formData, file_url: e.target.value })}
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>App Size (e.g. 750 MB)</label>
-                <input type="text" placeholder="750 MB" value={formData.size} onChange={e => setFormData({ ...formData, size: e.target.value })}
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none' }} />
+            <div className="form-group">
+              <label style={{ display: 'block', marginBottom: '0.8rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>Application APK File *</label>
+              <div 
+                className="glass"
+                style={{ 
+                  position: 'relative',
+                  background: 'rgba(255,255,255,0.02)', 
+                  border: '2px dashed var(--glass-border)', 
+                  borderRadius: '20px', 
+                  padding: '3rem 2rem', 
+                  textAlign: 'center', 
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+                onDrop={(e) => { 
+                  e.preventDefault(); 
+                  e.currentTarget.style.borderColor = 'var(--glass-border)'; 
+                  const file = e.dataTransfer.files[0];
+                  if (file && file.name.endsWith('.apk')) {
+                    handleFileChange({ target: { name: 'apk', files: [file] } });
+                  }
+                }}
+              >
+                <input type="file" name="apk" accept=".apk" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                  <File size={28} style={{ color: 'var(--primary)' }} />
+                </div>
+                <h4 style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>{files.apk ? files.apk.name : 'Pick or Drag APK here'}</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{files.apk ? `Size: ${formData.size}` : 'Maximum file size: 500MB'}</p>
               </div>
             </div>
 
             <div style={{ position: 'relative' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Icon (Optional)</label>
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
-                <input type="file" accept="image/*" onChange={e => setFiles({ ...files, icon: e.target.files[0] })}
-                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                <ImageIcon size={28} color="var(--text-muted)" style={{ marginBottom: '0.5rem' }} />
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{files.icon ? files.icon.name : 'Click to select image'}</p>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Icon (Optional)</label>
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '1.5rem', textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
+                <input type="file" name="icon" accept="image/*" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <ImageIcon size={24} color="var(--text-muted)" style={{ marginBottom: '0.5rem' }} />
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{files.icon ? files.icon.name : 'Click to select icon image'}</p>
               </div>
             </div>
 
@@ -436,8 +475,8 @@ const AdminDashboard = () => {
             {actionStatus.success && <div style={{ color: '#10b981', background: 'rgba(16,185,129,0.1)', padding: '12px', borderRadius: '10px', display: 'flex', gap: '0.5rem', alignItems: 'center' }}><CheckCircle size={16} />{actionStatus.success}</div>}
 
             <button type="submit" disabled={actionStatus.loading} className="btn-primary"
-              style={{ padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', fontSize: '1rem' }}>
-              {actionStatus.loading ? <><Loader2 size={20} className="animate-spin" /> Uploading...</> : <><Upload size={20} /> Publish Application</>}
+              style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem', fontSize: '1.1rem' }}>
+              {actionStatus.loading ? <><Loader2 size={24} className="animate-spin" /> Publishing...</> : <><Upload size={24} /> Publish Application</>}
             </button>
           </form>
         </div>
