@@ -16,9 +16,6 @@ const UploadApp = () => {
 
   const navigate = useNavigate();
 
-  const [uploadType, setUploadType] = useState('file'); // 'file' or 'link'
-  const [externalLink, setExternalLink] = useState('');
-
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -44,12 +41,8 @@ const UploadApp = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (uploadType === 'file' && !files.apk) {
+    if (!files.apk) {
       return setStatus({ ...status, error: 'Please select an APK file to upload!' });
-    }
-    
-    if (uploadType === 'link' && !externalLink) {
-      return setStatus({ ...status, error: 'Please provide a valid application link!' });
     }
 
     setStatus({ loading: true, success: false, error: null });
@@ -59,65 +52,61 @@ const UploadApp = () => {
       let isChunked = false;
       let chunkCount = 1;
 
-      // 1. Handle APK Upload or Link
-      if (uploadType === 'link') {
-        finalFileUrl = externalLink;
-      } else if (files.apk) {
-        setModal({
-          isOpen: true,
-          type: 'upload',
-          progress: 0,
-          fileName: files.apk.name,
-          fileSize: formData.size,
-          status: 'active',
-          error: ''
-        });
+      // Upload APK
+      setModal({
+        isOpen: true,
+        type: 'upload',
+        progress: 0,
+        fileName: files.apk.name,
+        fileSize: formData.size,
+        status: 'active',
+        error: ''
+      });
 
-        const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
-        const fileSize = files.apk.size;
+      const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+      const fileSize = files.apk.size;
+      
+      if (fileSize > CHUNK_SIZE) {
+        isChunked = true;
+        chunkCount = Math.ceil(fileSize / CHUNK_SIZE);
+        const appId = `chunked_${Date.now()}`;
         
-        if (fileSize > CHUNK_SIZE) {
-          isChunked = true;
-          chunkCount = Math.ceil(fileSize / CHUNK_SIZE);
-          const appId = `chunked_${Date.now()}`;
+        for (let i = 0; i < chunkCount; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, fileSize);
+          const chunk = files.apk.slice(start, end);
+          const chunkName = `${appId}_part_${i}`;
           
-          for (let i = 0; i < chunkCount; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, fileSize);
-            const chunk = files.apk.slice(start, end);
-            const chunkName = `${appId}_part_${i}`;
-            
-            const { error: uploadError } = await supabase.storage
-              .from('cstore-apps')
-              .upload(chunkName, chunk);
-            
-            if (uploadError) throw uploadError;
-            const totalProgress = Math.round(((i + 1) / chunkCount) * 100);
-            setModal(prev => ({ ...prev, progress: totalProgress }));
-          }
-
-          const { data: { publicUrl } } = supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('cstore-apps')
-            .getPublicUrl(appId);
+            .upload(chunkName, chunk);
           
-          finalFileUrl = publicUrl;
-        } else {
-          const apkFileName = `${Date.now()}-${files.apk.name.replace(/\s+/g, '_')}`;
-          const { error: apkError } = await supabase.storage
-            .from('cstore-apps')
-            .upload(apkFileName, files.apk, {
-              onUploadProgress: (p) => {
-                const percent = Math.round((p.loaded / p.total) * 100);
-                setModal(prev => ({ ...prev, progress: percent }));
-              }
-            });
-
-          if (apkError) throw apkError;
-          const { data: { publicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(apkFileName);
-          finalFileUrl = publicUrl;
+          if (uploadError) throw uploadError;
+          const totalProgress = Math.round(((i + 1) / chunkCount) * 100);
+          setModal(prev => ({ ...prev, progress: totalProgress }));
         }
-        setModal(prev => ({ ...prev, status: 'success', progress: 100 }));
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('cstore-apps')
+          .getPublicUrl(appId);
+        
+        finalFileUrl = publicUrl;
+      } else {
+        const apkFileName = `${Date.now()}-${files.apk.name.replace(/\s+/g, '_')}`;
+        const { error: apkError } = await supabase.storage
+          .from('cstore-apps')
+          .upload(apkFileName, files.apk, {
+            onUploadProgress: (p) => {
+              const percent = Math.round((p.loaded / p.total) * 100);
+              setModal(prev => ({ ...prev, progress: percent }));
+            }
+          });
+
+        if (apkError) throw apkError;
+        const { data: { publicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(apkFileName);
+        finalFileUrl = publicUrl;
       }
+      setModal(prev => ({ ...prev, status: 'success', progress: 100 }));
 
       let iconUrl = null;
       if (files.icon) {
@@ -128,7 +117,7 @@ const UploadApp = () => {
         iconUrl = publicUrl;
       }
 
-      // 3. Send metadata to backend
+      // Send metadata to backend
       const response = await fetch(`${config.API_BASE_URL}/upload`, {
         method: 'POST',
         headers: {
@@ -177,37 +166,11 @@ const UploadApp = () => {
     <div style={{ padding: '4rem 0', maxWidth: '800px', margin: '0 auto' }}>
       <header style={{ textAlign: 'center', marginBottom: '3rem' }}>
         <h2 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Upload Application</h2>
-        <p style={{ color: 'var(--text-muted)' }}>Choose how you want to add your application.</p>
+        <p style={{ color: 'var(--text-muted)' }}>Fill in the details and upload your APK file.</p>
       </header>
 
       <form onSubmit={handleSubmit} className="glass" style={{ padding: '3rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         
-        {/* Upload Type Switcher */}
-        <div style={{ display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.03)', padding: '0.5rem', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-          <button 
-            type="button" 
-            onClick={() => setUploadType('file')}
-            style={{ 
-              flex: 1, padding: '12px', borderRadius: '12px', border: 'none', 
-              background: uploadType === 'file' ? 'var(--primary)' : 'transparent',
-              color: 'white', fontWeight: 600, transition: 'all 0.3s ease', cursor: 'pointer'
-            }}
-          >
-            Direct APK Upload
-          </button>
-          <button 
-            type="button" 
-            onClick={() => setUploadType('link')}
-            style={{ 
-              flex: 1, padding: '12px', borderRadius: '12px', border: 'none', 
-              background: uploadType === 'link' ? 'var(--primary)' : 'transparent',
-              color: 'white', fontWeight: 600, transition: 'all 0.3s ease', cursor: 'pointer'
-            }}
-          >
-            External App Link
-          </button>
-        </div>
-
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           <div className="form-group">
             <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Name *</label>
@@ -233,94 +196,71 @@ const UploadApp = () => {
           />
         </div>
 
-        {uploadType === 'file' ? (
-          <div className="form-group">
-            <label style={{ display: 'block', marginBottom: '0.8rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>Application APK File *</label>
-            <div 
-              className="glass"
-              style={{ 
-                position: 'relative',
-                background: 'rgba(255,255,255,0.02)', 
-                border: '2px dashed var(--glass-border)', 
-                borderRadius: '24px', 
-                padding: '4rem 2rem', 
-                textAlign: 'center', 
-                cursor: 'pointer',
-                transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                overflow: 'hidden'
-              }}
-              onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)'; }}
-              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
-              onDrop={(e) => { 
-                e.preventDefault(); 
-                e.currentTarget.style.borderColor = 'var(--glass-border)'; 
-                e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                const file = e.dataTransfer.files[0];
-                if (file && file.name.endsWith('.apk')) {
-                  handleFileChange({ target: { name: 'apk', files: [file] } });
-                } else {
-                  alert('Please drop a valid .apk file');
-                }
-              }}
-            >
-              <input 
-                type="file" name="apk" accept=".apk" onChange={handleFileChange} 
-                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 2 }} 
-              />
-              <div style={{ 
-                width: '80px', height: '80px', borderRadius: '50%', 
-                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)', 
-                display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                margin: '0 auto 2rem',
-                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.2)'
-              }}>
-                <File size={40} style={{ color: 'var(--primary)' }} />
-              </div>
-              <h4 style={{ fontSize: '1.25rem', marginBottom: '0.75rem', fontWeight: 700 }}>
-                {files.apk ? files.apk.name : 'Pick or Drag APK here'}
-              </h4>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '300px', margin: '0 auto' }}>
-                {files.apk ? `Detected Size: ${formData.size}` : 'Supports large files up to 500MB via fast chunked upload'}
-              </p>
-              
-              {files.apk && (
-                <div style={{ 
-                  position: 'absolute', bottom: '1rem', right: '1rem', 
-                  background: 'rgba(16, 185, 129, 0.1)', color: '#10b981',
-                  padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem',
-                  fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  border: '1px solid rgba(16, 185, 129, 0.2)'
-                }}>
-                  <CheckCircle size={14} /> Ready to Publish
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="form-group">
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Link (G-Drive / Direct Link) *</label>
+        {/* APK Upload Area */}
+        <div className="form-group">
+          <label style={{ display: 'block', marginBottom: '0.8rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>Application APK File *</label>
+          <div 
+            className="glass"
+            style={{ 
+              position: 'relative',
+              background: 'rgba(255,255,255,0.02)', 
+              border: '2px dashed var(--glass-border)', 
+              borderRadius: '24px', 
+              padding: '4rem 2rem', 
+              textAlign: 'center', 
+              cursor: 'pointer',
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              overflow: 'hidden'
+            }}
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)'; }}
+            onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+            onDrop={(e) => { 
+              e.preventDefault(); 
+              e.currentTarget.style.borderColor = 'var(--glass-border)'; 
+              e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+              const file = e.dataTransfer.files[0];
+              if (file && file.name.endsWith('.apk')) {
+                handleFileChange({ target: { name: 'apk', files: [file] } });
+              } else {
+                alert('Please drop a valid .apk file');
+              }
+            }}
+          >
             <input 
-              type="url" 
-              placeholder="https://drive.google.com/file/d/..." 
-              value={externalLink} 
-              onChange={(e) => setExternalLink(e.target.value)}
-              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', padding: '16px', borderRadius: '12px', color: 'white' }}
+              type="file" name="apk" accept=".apk" onChange={handleFileChange} 
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 2 }} 
             />
-            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>File Size (e.g. 25 MB)</label>
-                <input 
-                  type="text" name="size" value={formData.size} onChange={handleInputChange} placeholder="25 MB"
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '8px', color: 'white' }}
-                />
-              </div>
+            <div style={{ 
+              width: '80px', height: '80px', borderRadius: '50%', 
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              margin: '0 auto 2rem',
+              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.2)'
+            }}>
+              <File size={40} style={{ color: 'var(--primary)' }} />
             </div>
+            <h4 style={{ fontSize: '1.25rem', marginBottom: '0.75rem', fontWeight: 700 }}>
+              {files.apk ? files.apk.name : 'Pick or Drag APK here'}
+            </h4>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '300px', margin: '0 auto' }}>
+              {files.apk ? `Detected Size: ${formData.size}` : 'Supports large files up to 500MB via fast chunked upload'}
+            </p>
+            
+            {files.apk && (
+              <div style={{ 
+                position: 'absolute', bottom: '1rem', right: '1rem', 
+                background: 'rgba(16, 185, 129, 0.1)', color: '#10b981',
+                padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem',
+                fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem',
+                border: '1px solid rgba(16, 185, 129, 0.2)'
+              }}>
+                <CheckCircle size={14} /> Ready to Publish
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-
-
-
+        {/* Icon Upload */}
         <div className="file-upload" style={{ position: 'relative' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Select Icon (Optional)</label>
           <div style={{ background: 'rgba(255,255,255,0.03)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '2rem', textAlign: 'center', cursor: 'pointer' }}>

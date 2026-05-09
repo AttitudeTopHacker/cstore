@@ -1,32 +1,120 @@
-import axios from 'axios';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { ApkInstaller } from '@bixbyte/capacitor-apk-installer';
 import { Capacitor } from '@capacitor/core';
 
 export const DownloadManager = {
+
   /**
    * Helper to convert Google Drive links to direct download links
    */
   getDirectLink: (url) => {
-    if (url.includes('drive.google.com')) {
-      const idMatch = url.match(/[-\w]{25,}/);
+    if (url && url.includes('drive.google.com')) {
+      const idMatch = url.match(/\/d\/([^/]+)/);
       if (idMatch) {
-        return `https://drive.google.com/uc?export=download&id=${idMatch[0]}`;
+        return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
+      }
+      // fallback for older format
+      const idMatch2 = url.match(/[-\w]{25,}/);
+      if (idMatch2) {
+        return `https://drive.google.com/uc?export=download&id=${idMatch2[0]}`;
       }
     }
     return url;
   },
 
   /**
-   * Downloads a file and saves it to the device storage.
+   * WEB (Desktop/Laptop): Download using browser Fetch + Blob
+   */
+  downloadFileWeb: async (url, fileName, onProgress) => {
+    const directUrl = DownloadManager.getDirectLink(url);
+
+    const response = await fetch(directUrl);
+    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+
+    const contentLength = response.headers.get('Content-Length');
+    const total = contentLength ? parseInt(contentLength, 10) : 0;
+    let loaded = 0;
+
+    const reader = response.body.getReader();
+    const chunks = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      if (total > 0) {
+        onProgress(Math.round((loaded / total) * 100));
+      }
+    }
+
+    // Merge all chunks into a single Blob
+    const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Trigger browser download
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Cleanup
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    onProgress(100);
+    return blobUrl;
+  },
+
+  /**
+   * WEB (Desktop/Laptop): Download chunked file using browser Fetch + Blob
+   */
+  downloadChunkedFileWeb: async (urlBase, chunkCount, fileName, onProgress) => {
+    const allChunks = [];
+
+    for (let i = 0; i < chunkCount; i++) {
+      const chunkUrl = `${urlBase}_part_${i}`;
+      const response = await fetch(chunkUrl);
+      if (!response.ok) throw new Error(`Chunk ${i} download failed: ${response.statusText}`);
+
+      const buffer = await response.arrayBuffer();
+      allChunks.push(new Uint8Array(buffer));
+
+      const progress = Math.round(((i + 1) / chunkCount) * 100);
+      onProgress(progress);
+    }
+
+    // Merge all chunks into one Blob
+    const blob = new Blob(allChunks, { type: 'application/vnd.android.package-archive' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Trigger browser download
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    return blobUrl;
+  },
+
+  /**
+   * Main download function — auto-detects platform
    */
   downloadFile: async (url, fileName, onProgress) => {
+    // WEB (Desktop/Laptop browser)
+    if (Capacitor.getPlatform() === 'web') {
+      return await DownloadManager.downloadFileWeb(url, fileName, onProgress);
+    }
+
+    // ANDROID / iOS — Capacitor Filesystem
     try {
       const directUrl = DownloadManager.getDirectLink(url);
       const folderPath = 'Download/cstore';
       const fullPath = `${folderPath}/${fileName}`;
       
-      // 1. Ensure the directory exists
       try {
         await Filesystem.mkdir({
           path: folderPath,
@@ -35,7 +123,6 @@ export const DownloadManager = {
         });
       } catch (e) {}
 
-      // 2. Clear and set progress listener
       await Filesystem.removeAllListeners();
       await Filesystem.addListener('progress', (progress) => {
         if (progress.bytes && progress.contentLength) {
@@ -44,15 +131,12 @@ export const DownloadManager = {
         }
       });
 
-      // 3. Download
       const downloadResult = await Filesystem.downloadFile({
         url: directUrl,
         path: fullPath,
         directory: Directory.ExternalStorage
       });
 
-      // 4. Verify file exists and has size
-      // Wait a bit for filesystem to sync
       await new Promise(r => setTimeout(r, 1000));
       
       const stat = await Filesystem.stat({
@@ -60,10 +144,8 @@ export const DownloadManager = {
         directory: Directory.ExternalStorage
       });
 
-      // If file is very small (less than 100KB), it's likely an HTML error page or virus scan warning
-      if (stat.size < 100000) { 
-          console.warn('File too small for an APK. Size:', stat.size);
-          throw new Error('DOWNLOAD_BLOCKED');
+      if (stat.size < 100000) {
+        throw new Error('DOWNLOAD_BLOCKED');
       }
       
       return downloadResult.path;
@@ -74,9 +156,15 @@ export const DownloadManager = {
   },
 
   /**
-   * Downloads a multi-part file and assembles it.
+   * Main chunked download — auto-detects platform
    */
   downloadChunkedFile: async (urlBase, chunkCount, fileName, onProgress) => {
+    // WEB (Desktop/Laptop browser)
+    if (Capacitor.getPlatform() === 'web') {
+      return await DownloadManager.downloadChunkedFileWeb(urlBase, chunkCount, fileName, onProgress);
+    }
+
+    // ANDROID / iOS — Capacitor Filesystem
     const folderPath = 'Download/cstore';
     const finalPath = `${folderPath}/${fileName}`;
     const tempFolder = `${folderPath}/temp`;
@@ -84,29 +172,22 @@ export const DownloadManager = {
     console.log(`Starting chunked download for ${fileName}. Total chunks: ${chunkCount}`);
 
     try {
-      // 1. Setup Directories
       await Filesystem.mkdir({ path: folderPath, directory: Directory.ExternalStorage, recursive: true }).catch(() => {});
       await Filesystem.mkdir({ path: tempFolder, directory: Directory.ExternalStorage, recursive: true }).catch(() => {});
-
-      // 2. Delete existing file if any
       await Filesystem.deleteFile({ path: finalPath, directory: Directory.ExternalStorage }).catch(() => {});
 
-      // 3. Download and Assemble Chunks
       for (let i = 0; i < chunkCount; i++) {
         const chunkUrl = `${urlBase}_part_${i}`;
-        const tempChunkFileName = `part_${i}.tmp`;
-        const tempChunkPath = `${tempFolder}/${tempChunkFileName}`;
+        const tempChunkPath = `${tempFolder}/part_${i}.tmp`;
         
-        console.log(`Downloading chunk ${i+1}/${chunkCount}...`);
+        console.log(`Downloading chunk ${i + 1}/${chunkCount}...`);
         
-        // Download Chunk
-        const downloadResult = await Filesystem.downloadFile({
+        await Filesystem.downloadFile({
           url: chunkUrl,
           path: tempChunkPath,
           directory: Directory.ExternalStorage
         });
 
-        // Verify Chunk Size
         const chunkStat = await Filesystem.stat({
           path: tempChunkPath,
           directory: Directory.ExternalStorage
@@ -116,30 +197,25 @@ export const DownloadManager = {
           throw new Error(`Chunk ${i} is empty. Download failed.`);
         }
 
-        // Read Chunk as Base64
+        // Read as Base64 and append
         const chunkData = await Filesystem.readFile({
           path: tempChunkPath,
-          directory: Directory.ExternalStorage
+          directory: Directory.ExternalStorage,
+          encoding: null  // binary → returns base64
         });
 
-        // Append to Final File
         await Filesystem.appendFile({
           path: finalPath,
           data: chunkData.data,
           directory: Directory.ExternalStorage
         });
 
-        // Clean up temp chunk
         await Filesystem.deleteFile({
           path: tempChunkPath,
           directory: Directory.ExternalStorage
         });
 
-        // Update Progress
-        const overallProgress = Math.round(((i + 1) / chunkCount) * 100);
-        onProgress(overallProgress);
-
-        // Small delay to prevent memory spikes on slow devices
+        onProgress(Math.round(((i + 1) / chunkCount) * 100));
         await new Promise(r => setTimeout(r, 200));
       }
 
@@ -153,13 +229,8 @@ export const DownloadManager = {
     }
   },
 
-
-
-
-
   /**
-   * Triggers the APK installation process.
-   * @param {string} fileUri - The URI of the APK file
+   * Triggers the APK installation process (Android only)
    */
   installApk: async (fileUri) => {
     if (Capacitor.getPlatform() !== 'android') {
@@ -168,13 +239,10 @@ export const DownloadManager = {
     }
 
     try {
-      // 1. Check/Request permission
       const { hasPermission } = await ApkInstaller.checkInstallPermission();
       if (!hasPermission) {
         await ApkInstaller.requestInstallPermission();
       }
-
-      // 2. Install (path needs to be the actual file path, not necessarily the URI)
       const path = fileUri.replace('file://', '');
       await ApkInstaller.installApk({ filePath: path });
     } catch (error) {
@@ -183,4 +251,3 @@ export const DownloadManager = {
     }
   }
 };
-
