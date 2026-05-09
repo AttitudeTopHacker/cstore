@@ -20,7 +20,14 @@ const AdminUpload = () => {
   const [externalLink, setExternalLink] = useState('');
 
   const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    // App name: only letters and spaces allowed
+    if (name === 'name') {
+      const filtered = value.replace(/[^a-zA-Z ]/g, '');
+      setFormData({ ...formData, name: filtered });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleFileChange = (e) => {
@@ -44,6 +51,12 @@ const AdminUpload = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!formData.name.trim()) {
+      return setStatus({ ...status, error: 'App name is required!' });
+    }
+    if (!/^[a-zA-Z ]+$/.test(formData.name.trim())) {
+      return setStatus({ ...status, error: 'App name can only contain letters and spaces. No numbers or special characters allowed.' });
+    }
     if (uploadType === 'file' && !files.apk) {
       return setStatus({ ...status, error: 'Please select an APK file to upload!' });
     }

@@ -269,6 +269,7 @@ app.post('/api/upload', authenticateUser, async (req, res) => {
         const { name, version, description, file_url, icon_url, size, is_chunked, chunk_count } = req.body || {};
 
         if (!name) return res.status(400).json({ error: 'App name is required in request body' });
+        if (!/^[a-zA-Z ]+$/.test(name.trim())) return res.status(400).json({ error: 'App name can only contain letters and spaces. No numbers or special characters allowed.' });
         if (!file_url) return res.status(400).json({ error: 'App file URL is required' });
 
         // Insert Metadata with UserID
