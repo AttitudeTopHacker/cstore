@@ -11,6 +11,7 @@ import UploadApp from './pages/UploadApp';
 import './index.css';
 
 function App() {
+  console.log('CStore v1.1.0 Loaded - 2026-05-09');
   return (
     <Router>
       <div className="App">
