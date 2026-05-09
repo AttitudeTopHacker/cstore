@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Download, LayoutGrid, Database, Search, Plus, PackageOpen, LogIn } from 'lucide-react';
+import { Download, LayoutGrid, Search, Plus, PackageOpen, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Browser } from '@capacitor/browser';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
 import ProgressModal from '../components/ProgressModal';
 import { DownloadManager } from '../utils/DownloadManager';
 
+const isNative = Capacitor.getPlatform() !== 'web';
 
 const Home = () => {
   const [apps, setApps] = useState([]);
@@ -19,15 +21,44 @@ const Home = () => {
   // Progress Modal State
   const [modal, setModal] = useState({ isOpen: false, type: 'download', progress: 0, fileName: '', fileSize: '', status: 'active', error: '', url: '', id: '' });
   
-  // Track downloaded apps
-  const [downloadedApps, setDownloadedApps] = useState(() => {
-    const saved = localStorage.getItem('downloaded_apps');
-    return saved ? JSON.parse(saved) : {};
-  });
+  // Track downloaded apps — only used on Android
+  const [downloadedApps, setDownloadedApps] = useState({});
 
+  // On Android: scan Download/cstore folder on load to check existing APKs
   useEffect(() => {
-    localStorage.setItem('downloaded_apps', JSON.stringify(downloadedApps));
-  }, [downloadedApps]);
+    if (!isNative) return;
+
+    const checkDownloadedFiles = async () => {
+      try {
+        const result = await Filesystem.readdir({
+          path: 'Download/cstore',
+          directory: Directory.ExternalStorage,
+        });
+
+        const fileNames = result.files.map(f => (typeof f === 'string' ? f : f.name));
+
+        setApps(prev => {
+          const newDownloaded = {};
+          prev.forEach(app => {
+            const cleanName = (app.name || 'app').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_');
+            const cleanVersion = (app.version || '1.0').replace(/[^a-zA-Z0-9.]/g, '_');
+            const expectedFileName = `${cleanName}_v${cleanVersion}.apk`;
+            if (fileNames.includes(expectedFileName)) {
+              newDownloaded[app.id] = `Download/cstore/${expectedFileName}`;
+            }
+          });
+          setDownloadedApps(newDownloaded);
+          return prev;
+        });
+      } catch (e) {
+        // Folder doesn't exist yet — that's fine
+      }
+    };
+
+    if (apps.length > 0) {
+      checkDownloadedFiles();
+    }
+  }, [apps]);
 
   useEffect(() => {
     fetchApps();
@@ -52,7 +83,6 @@ const Home = () => {
 
   const handleDownload = async (app) => {
     const { id, file_url, name, size } = app;
-    // Build a clean, safe filename: remove special chars, handle missing version
     const cleanName = (name || 'app').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').trim();
     const cleanVersion = (app.version || '1.0').replace(/[^a-zA-Z0-9.]/g, '_');
     const fileName = `${cleanName}_v${cleanVersion}.apk`;
@@ -93,13 +123,20 @@ const Home = () => {
 
       // 3. Success state
       setModal(prev => ({ ...prev, status: 'success', progress: 100 }));
-      setDownloadedApps(prev => ({ ...prev, [id]: path }));
 
-      // 4. Auto-close and Install
-      setTimeout(() => setModal(prev => ({ ...prev, isOpen: false })), 1500);
-      setTimeout(async () => {
-        try { await DownloadManager.installApk(path); } catch (err) { console.error('Auto install failed:', err); }
-      }, 2000);
+      if (isNative) {
+        // Android: save path, show "Open App" button later
+        setDownloadedApps(prev => ({ ...prev, [id]: path }));
+
+        // Auto-close modal and trigger install
+        setTimeout(() => setModal(prev => ({ ...prev, isOpen: false })), 1500);
+        setTimeout(async () => {
+          try { await DownloadManager.installApk(path); } catch (err) { console.error('Auto install failed:', err); }
+        }, 2000);
+      } else {
+        // Web (Desktop/Laptop): just close modal after download — no "Open App"
+        setTimeout(() => setModal(prev => ({ ...prev, isOpen: false })), 2000);
+      }
 
     } catch (err) {
       console.error('Download failed:', err);
@@ -110,8 +147,6 @@ const Home = () => {
           status: 'error', 
           error: 'Google Drive is asking for a virus scan confirmation. Opening in browser so you can click "Download anyway".' 
         }));
-        
-        // Wait a bit so user can read, then open browser
         setTimeout(async () => {
           await Browser.open({ url: DownloadManager.getDirectLink(file_url) });
           setModal(prev => ({ ...prev, isOpen: false }));
@@ -257,13 +292,17 @@ const Home = () => {
                       <Download size={16} /> {app.download_count}
                     </span>
                   </div>
-                  {downloadedApps[app.id] ? (
+
+                  {/* Button Logic:
+                      - Web: always show "Download" 
+                      - Android: show "Open App" if already downloaded, else "Install Now" */}
+                  {isNative && downloadedApps[app.id] ? (
                     <button onClick={() => handleOpenApp(app.id)} className="btn-primary" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)' }}>
-                        Open App
+                      Open App
                     </button>
                   ) : (
                     <button onClick={() => handleDownload(app)} className="btn-primary">
-                        Install Now
+                      {isNative ? 'Install Now' : 'Download'}
                     </button>
                   )}
                 </div>
