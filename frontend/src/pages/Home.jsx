@@ -52,7 +52,10 @@ const Home = () => {
 
   const handleDownload = async (app) => {
     const { id, file_url, name, size } = app;
-    const fileName = `${name.replace(/\s+/g, '_')}_${app.version}.apk`;
+    // Build a clean, safe filename: remove special chars, handle missing version
+    const cleanName = (name || 'app').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').trim();
+    const cleanVersion = (app.version || '1.0').replace(/[^a-zA-Z0-9.]/g, '_');
+    const fileName = `${cleanName}_v${cleanVersion}.apk`;
 
     setModal({
       isOpen: true,
