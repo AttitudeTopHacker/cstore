@@ -275,28 +275,25 @@ const AdminDashboard = () => {
           <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Users size={18} color="#6366f1" /> Recent Users
           </h3>
-          <div className="glass" style={{ overflow: 'hidden', borderRadius: '16px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                  {['Name', 'Email', 'Role', 'Joined'].map(h => (
-                    <th key={h} style={{ padding: '14px 20px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {users.slice(0, 5).map((u) => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td style={{ padding: '14px 20px', fontWeight: 500 }}>{u.name}</td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.email}</td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <span style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', padding: '3px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>{u.role}</span>
-                    </td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatDate(u.created_at)}</td>
-                  </tr>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {users.slice(0, 5).map((u) => (
+              <div key={u.id} className="glass" style={{ padding: '1rem 1.25rem', borderRadius: '14px' }}>
+                {[
+                  { label: 'Name',   value: u.name },
+                  { label: 'Email',  value: u.email },
+                  { label: 'Role',   value: u.role, isBadge: true },
+                  { label: 'Joined', value: formatDate(u.created_at) },
+                ].map(({ label, value, isBadge }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, minWidth: '60px' }}>{label}</span>
+                    {isBadge
+                      ? <span style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', padding: '2px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 700 }}>{value}</span>
+                      : <span style={{ fontSize: '0.88rem', color: 'white', textAlign: 'right', maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
+                    }
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -332,76 +329,40 @@ const AdminDashboard = () => {
 
       {/* ── USERS TAB ── */}
       {activeTab === TAB.USERS && (
-        <div>
-          <div className="glass" style={{ overflow: 'auto', borderRadius: '16px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                  {['Name', 'Email', 'Apps', 'Store', 'Status', 'Joined', 'Actions'].map(h => (
-                    <th key={h} style={{ padding: '14px 20px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {users.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No users registered yet.</td></tr>
-                )}
-                {users.map((u) => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s' }}>
-                    <td style={{ padding: '14px 20px', fontWeight: 600 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 700, flexShrink: 0 }}>
-                          {u.name?.charAt(0).toUpperCase()}
-                        </div>
-                        {u.name}
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.email}</td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: 'var(--primary)' }}>
-                        <Package size={14} /> {u.apps_count}
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 20px' }}>
-                      {u.apps_count === 0 ? (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#f59e0b', fontSize: '0.8rem' }}>
-                          <AlertCircle size={14} /> Empty
-                        </span>
-                      ) : (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#10b981', fontSize: '0.8rem' }}>
-                          <Store size={14} /> Active
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <span style={{ 
-                        background: u.status === 'suspended' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
-                        color: u.status === 'suspended' ? '#ef4444' : '#10b981',
-                        padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700,
-                        textTransform: 'uppercase'
-                      }}>
-                        {u.status || 'active'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatDate(u.created_at)}</td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => handleStatusToggle(u.id, u.status)}
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: u.status === 'suspended' ? '#10b981' : '#f59e0b', padding: '6px 10px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          {u.status === 'suspended' ? <UserCheck size={14} /> : <UserX size={14} />}
-                          <span style={{ fontSize: '0.8rem' }}>{u.status === 'suspended' ? 'Unsuspend' : 'Suspend'}</span>
-                        </button>
-                        <button onClick={() => handleDeleteUser(u.id)}
-                          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '6px 10px', borderRadius: '7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          {users.length === 0 && (
+            <div className="glass" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', borderRadius: '16px' }}>No users registered yet.</div>
+          )}
+          {users.map((u) => (
+            <div key={u.id} className="glass" style={{ padding: '1.1rem 1.4rem', borderRadius: '16px' }}>
+              {[
+                { label: 'Name',   value: u.name },
+                { label: 'Email',  value: u.email },
+                { label: 'Role',   value: u.role,            isBadge: true, badgeColor: '#a5b4fc', badgeBg: 'rgba(99,102,241,0.15)' },
+                { label: 'Joined', value: formatDate(u.created_at) },
+              ].map(({ label, value, isBadge, badgeColor, badgeBg }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, minWidth: '64px' }}>{label}</span>
+                  {isBadge
+                    ? <span style={{ background: badgeBg, color: badgeColor, padding: '2px 12px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 700 }}>{value}</span>
+                    : <span style={{ fontSize: '0.88rem', color: 'white', textAlign: 'right', maxWidth: '68%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
+                  }
+                </div>
+              ))}
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.75rem' }}>
+                <button onClick={() => handleStatusToggle(u.id, u.status)}
+                  style={{ flex: 1, background: u.status === 'suspended' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${u.status === 'suspended' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`, color: u.status === 'suspended' ? '#10b981' : '#f59e0b', padding: '8px', borderRadius: '9px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600 }}>
+                  {u.status === 'suspended' ? <UserCheck size={14} /> : <UserX size={14} />}
+                  {u.status === 'suspended' ? 'Activate' : 'Suspend'}
+                </button>
+                <button onClick={() => handleDeleteUser(u.id)}
+                  style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '8px 14px', borderRadius: '9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600 }}>
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
