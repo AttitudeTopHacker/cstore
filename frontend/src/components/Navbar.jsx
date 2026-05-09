@@ -60,22 +60,30 @@ const Navbar = () => {
                   {isAdmin ? (
                     <>
                       <Link to="/admin" onClick={() => setDropdownOpen(false)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#a5b4fc', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#a5b4fc', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600 }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(165,180,252,0.1)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <ShieldCheck size={16} /> Admin Panel
                       </Link>
                       <Link to="/" onClick={() => setDropdownOpen(false)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <LayoutGrid size={16} /> View Store
                       </Link>
                     </>
                   ) : (
                     <Link to="/dashboard" onClick={() => setDropdownOpen(false)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                       <User size={16} /> My Dashboard
                     </Link>
                   )}
                   <Link to="/upload" onClick={() => setDropdownOpen(false)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 14px', borderRadius: '8px', color: '#f8fafc', textDecoration: 'none', fontSize: '0.9rem' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <Upload size={16} /> Upload App
                   </Link>
                   <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />

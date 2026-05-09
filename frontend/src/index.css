@@ -67,10 +67,11 @@ body {
   transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.glass:hover {
-  border-color: rgba(99, 102, 241, 0.4);
+/* Only app cards get a subtle hover, not every glass element */
+.grid-apps .glass:hover {
+  border-color: rgba(99, 102, 241, 0.35);
   background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
 }
 
 .btn-primary {
@@ -205,6 +206,35 @@ nav {
   to { background-position: 200% center; }
 }
 
+/* ─── Navbar Link Hover ─────────────────────────────── */
+nav a:not(.logo):hover,
+nav button:not(.btn-primary):hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+  color: white !important;
+  transition: all 0.2s ease;
+}
+
+/* ─── Icon-only Round Button Hover ─────────────────── */
+/* Any button that is circular/icon-only */
+button[style*="border-radius: '50%'"],
+button[style*="borderRadius: '50%'"],
+button[style*="borderRadius: 50"],
+button[style*="border-radius: 50"] {
+  transition: all 0.2s ease;
+}
+button[style*="border-radius: '50%'"]:hover,
+button[style*="borderRadius: '50%'"]:hover {
+  background: rgba(255,255,255,0.12) !important;
+  transform: scale(1.1);
+}
+
+/* ─── Dropdown Menu Items ───────────────────────────── */
+.dropdown-item:hover {
+  background: rgba(255,255,255,0.07);
+  border-radius: 8px;
+}
+
 /* Bottom Nav for Mobile */
 .bottom-nav {
   position: fixed;
@@ -233,17 +263,31 @@ nav {
   text-decoration: none;
   font-size: 0.7rem;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   flex: 1;
+  padding: 6px 12px;
+  border-radius: 16px;
+  position: relative;
+}
+
+.bottom-nav .nav-item:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.bottom-nav .nav-item:active {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary);
+  transform: scale(0.94);
 }
 
 .bottom-nav .nav-item.active {
   color: var(--primary);
+  background: rgba(99, 102, 241, 0.12);
 }
 
 .bottom-nav .nav-item.active svg {
-  transform: translateY(-2px);
-  filter: drop-shadow(var(--glow-primary));
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
 }
 
 /* Responsive Utilities */
