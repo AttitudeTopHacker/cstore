@@ -1,31 +1,34 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, LayoutGrid } from 'lucide-react';
 
 const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
   if (!isOpen || !app) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Overlay */}
       <div
         onClick={onClose}
         style={{
           position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(2, 6, 23, 0.85)', /* Very dark overlay for text contrast */
+          backdropFilter: 'blur(24px)', /* Heavy blur to completely obscure background site */
+          WebkitBackdropFilter: 'blur(24px)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 9999,
+          zIndex: 99999, /* High z-index to stay above everything else */
           padding: '1.5rem',
         }}
       >
         {/* Modal Card */}
         <div
           onClick={(e) => e.stopPropagation()}
-          className="glass"
           style={{
             padding: '2.5rem',
             borderRadius: '24px',
@@ -35,8 +38,9 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
             maxHeight: '80vh',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-            border: '1px solid var(--glass-border)'
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8)',
+            border: '1px solid rgba(99, 102, 241, 0.2)', /* Subtle primary blue border */
+            background: '#0b132b' /* Solid premium dark blueish background */
           }}
         >
           {/* Close button */}
@@ -152,7 +156,8 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
 

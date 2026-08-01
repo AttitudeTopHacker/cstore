@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import config from '../config';
@@ -173,21 +174,24 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
     }
   };
 
-  return (
+  return createPortal(
     <>
       {/* Overlay */}
       <div
         onClick={onClose}
         style={{
           position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(2, 6, 23, 0.85)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 9999,
+          zIndex: 99999,
           padding: '1.5rem',
           overflowY: 'auto'
         }}
@@ -195,7 +199,6 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
         {/* Card Container */}
         <div
           onClick={(e) => e.stopPropagation()}
-          className="glass"
           style={{
             padding: '2.5rem',
             borderRadius: '24px',
@@ -204,8 +207,9 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
             position: 'relative',
             maxHeight: '90vh',
             overflowY: 'auto',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-            border: '1px solid var(--glass-border)'
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: '#0b0f19'
           }}
         >
           {/* Close button */}
@@ -374,7 +378,8 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
 

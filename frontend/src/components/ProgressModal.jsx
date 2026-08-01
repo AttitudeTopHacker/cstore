@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Download, Upload, X, RotateCcw, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 
 const ProgressModal = ({
@@ -22,31 +23,34 @@ const ProgressModal = ({
     ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'
     : 'linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%)';
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(2, 6, 23, 0.85)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 10000,
+        zIndex: 99999,
         padding: '1.5rem',
         animation: 'fadeIn 0.3s ease-out',
       }}
     >
       <div
         style={{
-          background: 'rgba(15, 23, 42, 0.95)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          background: '#0b132b', /* Solid premium dark blueish background */
+          border: '1px solid rgba(99, 102, 241, 0.2)', /* Subtle primary blue border */
           borderRadius: '28px',
           padding: '2.5rem',
           maxWidth: '450px',
           width: '100%',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8)',
           textAlign: 'center',
           position: 'relative',
           overflow: 'hidden',
@@ -219,7 +223,8 @@ const ProgressModal = ({
           animation: bounce 1.5s infinite ease-in-out;
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 };
 

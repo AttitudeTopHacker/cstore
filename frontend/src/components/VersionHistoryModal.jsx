@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Download, AlertCircle, Loader2, X, Clock, FileText } from 'lucide-react';
 import config from '../config';
 
@@ -39,28 +40,30 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
     });
   };
 
-  return (
+  return createPortal(
     <>
       {/* Overlay */}
       <div
         onClick={onClose}
         style={{
           position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(2, 6, 23, 0.85)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 9999,
+          zIndex: 99999,
           padding: '1.5rem',
         }}
       >
         {/* Card Container */}
         <div
           onClick={(e) => e.stopPropagation()}
-          className="glass"
           style={{
             padding: '2.5rem',
             borderRadius: '24px',
@@ -70,8 +73,9 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
             maxHeight: '80vh',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-            border: '1px solid var(--glass-border)'
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8)',
+            border: '1px solid rgba(99, 102, 241, 0.2)', /* Subtle primary blue border */
+            background: '#0b132b' /* Solid premium dark blueish background */
           }}
         >
           {/* Close button */}
@@ -206,7 +210,8 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
 
