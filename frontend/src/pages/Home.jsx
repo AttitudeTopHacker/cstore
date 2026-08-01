@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Download, LayoutGrid, Search, Plus, PackageOpen, LogIn, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import VersionHistoryModal from '../components/VersionHistoryModal';
+import AppDetailsModal from '../components/AppDetailsModal';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
@@ -29,11 +30,9 @@ const Home = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedAppForHistory, setSelectedAppForHistory] = useState(null);
 
-  // Expandable description toggle state
-  const [expandedDescriptions, setExpandedDescriptions] = useState({});
-  const toggleDescription = (appId) => {
-    setExpandedDescriptions(prev => ({ ...prev, [appId]: !prev[appId] }));
-  };
+  // App Details Modal State
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedAppForDetails, setSelectedAppForDetails] = useState(null);
 
   // On Android: scan Download/cstore folder on load to check existing APKs
   useEffect(() => {
@@ -316,22 +315,18 @@ const Home = () => {
                       fontSize: '0.95rem', 
                       lineHeight: 1.6,
                       margin: 0,
-                      ...(expandedDescriptions[app.id] ? {
-                        height: 'auto',
-                      } : {
-                        height: '4.5rem', 
-                        overflow: 'hidden', 
-                        display: '-webkit-box', 
-                        WebkitLineClamp: 3, 
-                        WebkitBoxOrient: 'vertical'
-                      })
+                      height: '4.5rem', 
+                      overflow: 'hidden', 
+                      display: '-webkit-box', 
+                      WebkitLineClamp: 3, 
+                      WebkitBoxOrient: 'vertical'
                     }}
                   >
                     {app.description || 'Elevate your experience with this premium utility designed for modern Android devices.'}
                   </p>
                   {app.description && app.description.length > 120 && (
                     <button 
-                      onClick={() => toggleDescription(app.id)}
+                      onClick={() => { setSelectedAppForDetails(app); setIsDetailsOpen(true); }}
                       style={{
                         background: 'none',
                         border: 'none',
@@ -349,7 +344,7 @@ const Home = () => {
                       onMouseEnter={e => e.currentTarget.style.opacity = 1}
                       onMouseLeave={e => e.currentTarget.style.opacity = 0.9}
                     >
-                      {expandedDescriptions[app.id] ? 'Show Less' : 'More Detailed Description'}
+                      More Detailed Description
                     </button>
                   )}
                 </div>
@@ -404,6 +399,14 @@ const Home = () => {
             chunk_count: 1
           });
         }}
+      />
+
+      {/* App Details Modal */}
+      <AppDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        app={selectedAppForDetails}
+        onDownload={handleDownload}
       />
     </div>
   );
