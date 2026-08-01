@@ -20,6 +20,13 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  scrollbar-width: none;  /* Hide scrollbar in Firefox */
+  -ms-overflow-style: none;  /* Hide scrollbar in IE/Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari, Opera, and WebKit/WebView globally */
+*::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -31,13 +38,6 @@ body {
   min-height: 100vh;
   overscroll-behavior: none;
   padding-bottom: env(safe-area-inset-bottom);
-  scrollbar-width: none;  /* Firefox */
-  -ms-overflow-style: none;  /* IE and Edge */
-}
-
-/* Hide scrollbar for Chrome, Safari, Opera and Android WebView */
-::-webkit-scrollbar {
-  display: none;
 }
 
 .mesh-bg {
@@ -46,7 +46,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: 
+  background:
     radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
     radial-gradient(circle at 100% 0%, rgba(168, 85, 247, 0.15) 0%, transparent 40%),
     radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.1) 0%, transparent 40%),
@@ -127,7 +127,8 @@ body {
   padding-bottom: 5rem;
 }
 
-.form-group input, .form-group textarea {
+.form-group input,
+.form-group textarea {
   width: 100%;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
@@ -138,7 +139,8 @@ body {
   transition: all 0.3s ease;
 }
 
-.form-group input:focus, .form-group textarea:focus {
+.form-group input:focus,
+.form-group textarea:focus {
   outline: none;
   border-color: var(--primary);
   background: rgba(255, 255, 255, 0.06);
@@ -147,8 +149,15 @@ body {
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .fade-in {
@@ -158,9 +167,15 @@ body {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */
@@ -212,7 +227,9 @@ nav {
 }
 
 @keyframes shine {
-  to { background-position: 200% center; }
+  to {
+    background-position: 200% center;
+  }
 }
 
 /* ─── Navbar Link Hover ─────────────────────────────── */
@@ -232,15 +249,16 @@ button[style*="borderRadius: 50"],
 button[style*="border-radius: 50"] {
   transition: all 0.2s ease;
 }
+
 button[style*="border-radius: '50%'"]:hover,
 button[style*="borderRadius: '50%'"]:hover {
-  background: rgba(255,255,255,0.12) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
   transform: scale(1.1);
 }
 
 /* ─── Dropdown Menu Items ───────────────────────────── */
 .dropdown-item:hover {
-  background: rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.07);
   border-radius: 8px;
 }
 
@@ -300,16 +318,40 @@ button[style*="borderRadius: '50%'"]:hover {
 }
 
 /* Responsive Utilities */
-.mobile-only { display: none; }
-.desktop-only { display: flex; }
+.mobile-only {
+  display: none;
+}
+
+.desktop-only {
+  display: flex;
+}
 
 @media (max-width: 768px) {
-  .desktop-only { display: none !important; }
-  .mobile-only { display: flex !important; }
-  .container { padding: 0 1rem; }
-  nav { height: 70px; padding: 0 1rem; }
-  .App { padding-top: 0; }
-  .grid-apps { grid-template-columns: 1fr; padding-bottom: 8rem; }
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: flex !important;
+  }
+
+  .container {
+    padding: 0 1rem;
+  }
+
+  nav {
+    height: 70px;
+    padding: 0 1rem;
+  }
+
+  .App {
+    padding-top: 0;
+  }
+
+  .grid-apps {
+    grid-template-columns: 1fr;
+    padding-bottom: 8rem;
+  }
 }
 
 /* Safe areas for Android/iOS */
@@ -317,6 +359,3 @@ body {
   padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
 }
-
-
-

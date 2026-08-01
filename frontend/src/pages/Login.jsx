@@ -83,7 +83,7 @@ const Login = () => {
   };
 
   return (
-    <div style={{ minHeight: '85vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+    <div style={{ minHeight: '85vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.6rem' }}>
       <div style={{ width: '100%', maxWidth: '500px' }}>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
@@ -94,7 +94,7 @@ const Login = () => {
           <p style={{ color: 'var(--text-muted)' }}>Sign in to your CStore account</p>
         </div>
 
-        <div className="glass" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="glass" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* Google Login Button */}
           <button onClick={handleGoogleLogin} disabled={status.loading}
@@ -153,7 +153,7 @@ const Login = () => {
       {/* Profile Completion Modal */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div className="glass" style={{ width: '100%', maxWidth: '400px', padding: '2.5rem', border: '1px solid var(--primary)' }}>
+          <div className="glass" style={{ width: '100%', maxWidth: '400px', padding: '1.5rem', border: '1px solid var(--primary)' }}>
             <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', textAlign: 'center' }}>Complete Your Profile</h3>
             <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', textAlign: 'center', fontSize: '0.9rem' }}>Set a username and password to finish your registration.</p>
             
