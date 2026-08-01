@@ -31,6 +31,13 @@ body {
   min-height: 100vh;
   overscroll-behavior: none;
   padding-bottom: env(safe-area-inset-bottom);
+  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari, Opera and Android WebView */
+::-webkit-scrollbar {
+  display: none;
 }
 
 .mesh-bg {

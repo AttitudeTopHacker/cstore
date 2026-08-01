@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
 import ConfirmModal from '../components/ConfirmModal';
+import UpdateAppModal from '../components/UpdateAppModal';
 
 const TAB = { OVERVIEW: 'overview', APPS: 'apps', USERS: 'users', UPLOAD: 'upload' };
 
@@ -23,6 +24,8 @@ const AdminDashboard = () => {
   const [actionStatus, setActionStatus] = useState({ loading: false, success: null, error: null });
   const [fetchError, setFetchError] = useState(null);
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [selectedAppForUpdate, setSelectedAppForUpdate] = useState(null);
 
   // Upload form state
   const [formData, setFormData] = useState({ name: '', version: '', description: '', size: '' });
@@ -317,10 +320,16 @@ const AdminDashboard = () => {
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Downloads</div>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(app.created_at)}</div>
-                <button onClick={() => handleDeleteApp(app.id)}
-                  style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'inherit', fontSize: '0.85rem' }}>
-                  <Trash2 size={15} /> Delete
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => { setSelectedAppForUpdate(app); setIsUpdateModalOpen(true); }}
+                    style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'inherit', fontSize: '0.85rem' }}>
+                    <RefreshCw size={15} /> Update
+                  </button>
+                  <button onClick={() => handleDeleteApp(app.id)}
+                    style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontFamily: 'inherit', fontSize: '0.85rem' }}>
+                    <Trash2 size={15} /> Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -453,6 +462,15 @@ const AdminDashboard = () => {
         onConfirm={modalConfig.onConfirm}
         onCancel={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
         type={modalConfig.type}
+      />
+      
+      {/* Update App Modal */}
+      <UpdateAppModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        app={selectedAppForUpdate}
+        token={token}
+        onSuccess={fetchAll}
       />
     </div>
   );

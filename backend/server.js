@@ -29,6 +29,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Health Check Endpoints
+app.get('/api/health', (req, res) => {
+    res.status(200).json({
+        status: 'UP',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
+app.get('/', (req, res) => {
+    res.status(200).send('CStore Backend is running.');
+});
+
 // Multer Setup (Memory Storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -283,7 +296,98 @@ app.post('/api/upload', authenticateUser, async (req, res) => {
         
         if (dbError) throw dbError;
 
+        // Insert initial history record
+        try {
+            await supabase.from('app_history').insert([{
+                app_id: insertedApp.id,
+                version: insertedApp.version || 'v1.0.0',
+                description: insertedApp.description || '',
+                file_url: insertedApp.file_url,
+                size: insertedApp.size || 'Unknown',
+                updated_by: req.user.role === 'admin' ? null : req.user.id
+            }]);
+        } catch (historyErr) {
+            console.error('⚠️ Warning: Failed to insert initial history. Ensure app_history table is created in Supabase.', historyErr.message);
+        }
+
         res.status(201).json({ message: 'App record created successfully', app: insertedApp, id: insertedApp.id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update App (User can update their own app, Admin can update any app)
+app.put('/api/apps/:id', authenticateUser, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, version, description, file_url, icon_url, size, is_chunked, chunk_count } = req.body || {};
+
+        // 1. Fetch current app
+        const { data: app, error: fetchError } = await supabase.from('apps').select('*').eq('id', id).single();
+        if (fetchError || !app) {
+            return res.status(404).json({ error: 'App not found' });
+        }
+
+        // 2. Check permission
+        if (req.user.role !== 'admin' && app.user_id !== req.user.id) {
+            return res.status(403).json({ error: 'Forbidden. You do not have permission to update this app.' });
+        }
+
+        // 3. Prepare update payload
+        const updateData = {};
+        if (name !== undefined) {
+            if (name.trim() && !/^[a-zA-Z ]+$/.test(name.trim())) {
+                return res.status(400).json({ error: 'App name can only contain letters and spaces.' });
+            }
+            updateData.name = name;
+        }
+        if (version !== undefined) updateData.version = version;
+        if (description !== undefined) updateData.description = description;
+        if (file_url !== undefined) updateData.file_url = file_url;
+        if (icon_url !== undefined) updateData.icon_url = icon_url;
+        if (size !== undefined) updateData.size = size;
+        if (is_chunked !== undefined) updateData.is_chunked = is_chunked;
+        if (chunk_count !== undefined) updateData.chunk_count = chunk_count;
+
+        const { data: updatedApp, error: updateError } = await supabase.from('apps')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // 4. Save history record
+        try {
+            await supabase.from('app_history').insert([{
+                app_id: id,
+                version: version || app.version || 'v1.0.0',
+                description: description || app.description || '',
+                file_url: file_url || app.file_url,
+                size: size || app.size || 'Unknown',
+                updated_by: req.user.role === 'admin' ? null : req.user.id
+            }]);
+        } catch (historyErr) {
+            console.error('⚠️ Warning: Failed to insert history record. Ensure app_history table is created in Supabase.', historyErr.message);
+        }
+
+        res.status(200).json({ message: 'App updated successfully', app: updatedApp });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get App History (Public)
+app.get('/api/apps/:id/history', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase.from('app_history')
+            .select('*')
+            .eq('app_id', id)
+            .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+        res.status(200).json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

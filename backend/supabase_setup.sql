@@ -47,3 +47,15 @@ $$ LANGUAGE plpgsql;
 -- 5. Storage Buckets (Run in Supabase Dashboard > Storage)
 -- Create bucket: 'cstore-apps'  (Public: Yes)
 -- Create bucket: 'cstore-icons' (Public: Yes)
+
+-- 6. Create the 'app_history' table (track version history of apps)
+CREATE TABLE IF NOT EXISTS app_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  app_id UUID REFERENCES apps(id) ON DELETE CASCADE,
+  version TEXT NOT NULL,
+  description TEXT,
+  file_url TEXT NOT NULL,
+  size TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL
+);

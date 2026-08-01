@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Download, LayoutGrid, Search, Plus, PackageOpen, LogIn } from 'lucide-react';
+import { Download, LayoutGrid, Search, Plus, PackageOpen, LogIn, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import VersionHistoryModal from '../components/VersionHistoryModal';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
@@ -23,6 +24,16 @@ const Home = () => {
   
   // Track downloaded apps — only used on Android
   const [downloadedApps, setDownloadedApps] = useState({});
+
+  // Version History Modal State
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedAppForHistory, setSelectedAppForHistory] = useState(null);
+
+  // Expandable description toggle state
+  const [expandedDescriptions, setExpandedDescriptions] = useState({});
+  const toggleDescription = (appId) => {
+    setExpandedDescriptions(prev => ({ ...prev, [appId]: !prev[appId] }));
+  };
 
   // On Android: scan Download/cstore folder on load to check existing APKs
   useEffect(() => {
@@ -275,16 +286,73 @@ const Home = () => {
                   <div>
                     <h3 style={{ fontSize: '1.4rem', marginBottom: '0.2rem' }}>{app.name}</h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 700 }}>{app.version}</span>
+                      <span 
+                        onClick={() => { setSelectedAppForHistory(app); setIsHistoryOpen(true); }}
+                        style={{ 
+                          fontSize: '0.85rem', 
+                          color: 'var(--primary)', 
+                          fontWeight: 700, 
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          textDecoration: 'underline'
+                        }}
+                        title="Click to view version history"
+                      >
+                        <Clock size={12} /> {app.version}
+                      </span>
                       <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{app.size}</span>
                     </div>
                   </div>
                 </div>
                 
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2.5rem', height: '4.5rem', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', lineHeight: 1.6 }}>
-                  {app.description || 'Elevate your experience with this premium utility designed for modern Android devices.'}
-                </p>
+                {/* Description */}
+                <div style={{ marginBottom: '2.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <p 
+                    style={{ 
+                      color: 'var(--text-muted)', 
+                      fontSize: '0.95rem', 
+                      lineHeight: 1.6,
+                      margin: 0,
+                      ...(expandedDescriptions[app.id] ? {
+                        height: 'auto',
+                      } : {
+                        height: '4.5rem', 
+                        overflow: 'hidden', 
+                        display: '-webkit-box', 
+                        WebkitLineClamp: 3, 
+                        WebkitBoxOrient: 'vertical'
+                      })
+                    }}
+                  >
+                    {app.description || 'Elevate your experience with this premium utility designed for modern Android devices.'}
+                  </p>
+                  {app.description && app.description.length > 120 && (
+                    <button 
+                      onClick={() => toggleDescription(app.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: '2px 0 0',
+                        alignSelf: 'flex-start',
+                        fontFamily: 'inherit',
+                        textDecoration: 'underline',
+                        opacity: 0.9,
+                        transition: 'opacity 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0.9}
+                    >
+                      {expandedDescriptions[app.id] ? 'Show Less' : 'More Detailed Description'}
+                    </button>
+                  )}
+                </div>
 
                 <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -317,6 +385,25 @@ const Home = () => {
         onCancel={() => setModal({ ...modal, status: 'cancelled' })}
         onRetry={() => handleDownload(apps.find(a => a.id === modal.id))}
         onClose={() => setModal({ ...modal, isOpen: false })}
+      />
+
+      {/* Version History Modal */}
+      <VersionHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        app={selectedAppForHistory}
+        onDownloadOld={(record) => {
+          setIsHistoryOpen(false);
+          handleDownload({
+            id: record.app_id,
+            name: `${selectedAppForHistory.name} (${record.version})`,
+            file_url: record.file_url,
+            size: record.size,
+            version: record.version,
+            is_chunked: false,
+            chunk_count: 1
+          });
+        }}
       />
     </div>
   );

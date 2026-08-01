@@ -1,36 +1,48 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Download, Calendar, Mail, LayoutGrid, LogOut, Package } from 'lucide-react';
+import { User, Download, Calendar, Mail, LayoutGrid, LogOut, Package, Upload, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
 import ConfirmModal from '../components/ConfirmModal';
+import UpdateAppModal from '../components/UpdateAppModal';
 
 const UserDashboard = () => {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [downloads, setDownloads] = useState([]);
+  const [myApps, setMyApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [selectedAppForUpdate, setSelectedAppForUpdate] = useState(null);
+
+  const fetchData = async () => {
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [profileRes, downloadsRes, appsRes] = await Promise.all([
+        fetch(`${config.API_BASE_URL}/user/profile`, { headers }),
+        fetch(`${config.API_BASE_URL}/user/downloads`, { headers }),
+        fetch(`${config.API_BASE_URL}/apps`),
+      ]);
+      const profileData = await profileRes.json();
+      const downloadsData = await downloadsRes.json();
+      const appsData = await appsRes.json();
+      
+      setProfile(profileData);
+      setDownloads(downloadsData);
+      
+      if (Array.isArray(appsData)) {
+        setMyApps(appsData.filter(app => app.user_id === profileData.id));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const headers = { Authorization: `Bearer ${token}` };
-        const [profileRes, downloadsRes] = await Promise.all([
-          fetch(`${config.API_BASE_URL}/user/profile`, { headers }),
-          fetch(`${config.API_BASE_URL}/user/downloads`, { headers }),
-        ]);
-        const profileData = await profileRes.json();
-        const downloadsData = await downloadsRes.json();
-        setProfile(profileData);
-        setDownloads(downloadsData);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, [token]);
 
@@ -112,6 +124,64 @@ const UserDashboard = () => {
           ))}
         </div>
       )}
+
+      {/* My Uploaded Apps */}
+      <h3 style={{ fontSize: '1.3rem', marginTop: '3rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <Package size={20} color="#a855f7" /> My Uploaded Apps
+      </h3>
+
+      {myApps.length === 0 ? (
+        <div className="glass" style={{ padding: '3rem', textAlign: 'center' }}>
+          <Package size={40} style={{ marginBottom: '1rem', opacity: 0.4 }} />
+          <p style={{ color: 'var(--text-muted)' }}>You haven't uploaded any applications yet.</p>
+          <button onClick={() => navigate('/upload')} className="btn-primary" style={{ marginTop: '1.25rem', padding: '10px 20px', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Upload size={16} /> Upload Your First App
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {myApps.map((app) => (
+            <div key={app.id} className="glass" style={{ padding: '1.25rem 1.75rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                {app.icon_url ? (
+                  <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : <LayoutGrid size={22} color="#6366f1" />}
+              </div>
+              <div style={{ flex: 1, minWidth: '150px' }}>
+                <div style={{ fontWeight: 600 }}>{app.name}</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{app.version} · {app.size}</div>
+              </div>
+              <div style={{ textAlign: 'center', padding: '0 1rem' }}>
+                <div style={{ fontWeight: 700, color: '#6366f1', fontSize: '1.15rem' }}>{app.download_count}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Downloads</div>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Uploaded: {formatDate(app.created_at)}
+              </div>
+              <button 
+                onClick={() => { setSelectedAppForUpdate(app); setIsUpdateModalOpen(true); }}
+                style={{ 
+                  background: 'rgba(99,102,241,0.1)', 
+                  border: '1px solid rgba(99,102,241,0.25)', 
+                  color: '#a5b4fc', 
+                  padding: '8px 16px', 
+                  borderRadius: '8px', 
+                  cursor: 'pointer', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem', 
+                  fontFamily: 'inherit', 
+                  fontSize: '0.85rem',
+                  fontWeight: 600
+                }}
+              >
+                <RefreshCw size={14} /> Update Build
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Logout Confirmation */}
       <ConfirmModal
         isOpen={showLogoutModal}
@@ -122,6 +192,15 @@ const UserDashboard = () => {
         type="danger"
         confirmText="Yes, Logout"
         cancelText="Stay"
+      />
+
+      {/* Update App Modal */}
+      <UpdateAppModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        app={selectedAppForUpdate}
+        token={token}
+        onSuccess={fetchData}
       />
     </div>
   );
