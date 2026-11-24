@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Download, Calendar, Mail, LayoutGrid, LogOut, Package, Upload, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import config from '../config';
+import { supabase } from '../supabaseClient';
 import ConfirmModal from '../components/ConfirmModal';
 import UpdateAppModal from '../components/UpdateAppModal';
 
@@ -20,23 +21,38 @@ const UserDashboard = () => {
   const fetchData = async () => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [profileRes, downloadsRes, appsRes] = await Promise.all([
-        fetch(`${config.API_BASE_URL}/user/profile`, { headers }),
-        fetch(`${config.API_BASE_URL}/user/downloads`, { headers }),
-        fetch(`${config.API_BASE_URL}/apps`),
-      ]);
-      const profileData = await profileRes.json();
-      const downloadsData = await downloadsRes.json();
-      const appsData = await appsRes.json();
-      
-      setProfile(profileData);
-      setDownloads(downloadsData);
+      let profileData = user;
+      let downloadsData = [];
+      let appsData = [];
+
+      try {
+        const [profileRes, downloadsRes, appsRes] = await Promise.all([
+          fetch(`${config.API_BASE_URL}/user/profile`, { headers }),
+          fetch(`${config.API_BASE_URL}/user/downloads`, { headers }),
+          fetch(`${config.API_BASE_URL}/apps`),
+        ]);
+        if (profileRes.ok) profileData = await profileRes.json();
+        if (downloadsRes.ok) downloadsData = await downloadsRes.json();
+        if (appsRes.ok) appsData = await appsRes.json();
+      } catch (backendErr) {
+        console.warn('Backend unavailable for UserDashboard, using direct Supabase...', backendErr.message);
+      }
+
+      // If apps was not fetched from backend, get from Supabase
+      if (!Array.isArray(appsData) || appsData.length === 0) {
+        const { data: sbApps } = await supabase.from('apps').select('*').order('created_at', { ascending: false });
+        if (Array.isArray(sbApps)) appsData = sbApps;
+      }
+
+      setProfile(profileData || user);
+      setDownloads(Array.isArray(downloadsData) ? downloadsData : []);
       
       if (Array.isArray(appsData)) {
-        setMyApps(appsData.filter(app => app.user_id === profileData.id));
+        const currentUserId = profileData?.id || user?.id;
+        setMyApps(appsData.filter(app => app.user_id === currentUserId));
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching dashboard data:', err);
     } finally {
       setLoading(false);
     }

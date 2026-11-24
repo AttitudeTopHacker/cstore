@@ -141,32 +141,51 @@ const AdminUpload = () => {
         iconUrl = publicUrl;
       }
 
-      // 3. Send metadata to backend
-      const response = await fetch(`${config.API_BASE_URL}/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      // 3. Send metadata: try backend first, fallback to direct Supabase
+      let newAppId = null;
+      try {
+        const response = await fetch(`${config.API_BASE_URL}/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            version: formData.version,
+            description: formData.description,
+            file_url: finalFileUrl,
+            icon_url: iconUrl,
+            size: formData.size || 'Unknown',
+            is_chunked: isChunked,
+            chunk_count: chunkCount
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          newAppId = result.id || (result.app && result.app.id);
+        } else {
+          throw new Error('Backend upload failed');
+        }
+      } catch (backendErr) {
+        console.warn('Backend unavailable, inserting directly to Supabase...', backendErr.message);
+        const { data: insertedApp, error: insertError } = await supabase.from('apps').insert([{
           name: formData.name,
           version: formData.version,
           description: formData.description,
           file_url: finalFileUrl,
           icon_url: iconUrl,
           size: formData.size || 'Unknown',
-          is_chunked: isChunked,
-          chunk_count: chunkCount
-        }),
-      });
+          is_chunked: isChunked || false,
+          chunk_count: chunkCount || 1,
+          user_id: null,
+          download_count: 0
+        }]).select().single();
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Upload failed!');
+        if (insertError) throw insertError;
+        newAppId = insertedApp.id;
       }
-
-      const result = await response.json();
-      const newAppId = result.id || (result.app && result.app.id);
       
       if (newAppId && isChunked) {
         await supabase.from('apps').update({

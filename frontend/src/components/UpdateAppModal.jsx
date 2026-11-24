@@ -137,15 +137,33 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
         finalIconUrl = publicUrl;
       }
 
-      // 3. Update App via Backend API
+      // 3. Update App via Backend API with Supabase direct fallback
       setUploadStatus('saving');
-      const response = await fetch(`${config.API_BASE_URL}/apps/${app.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      try {
+        const response = await fetch(`${config.API_BASE_URL}/apps/${app.id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            version: formData.version,
+            description: formData.description,
+            file_url: finalFileUrl,
+            icon_url: finalIconUrl,
+            size: formData.size,
+            is_chunked: isChunked,
+            chunk_count: chunkCount
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Backend update failed');
+        }
+      } catch (backendErr) {
+        console.warn('Backend unavailable, updating directly in Supabase...', backendErr.message);
+        const { error: updateError } = await supabase.from('apps').update({
           name: formData.name,
           version: formData.version,
           description: formData.description,
@@ -154,12 +172,9 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
           size: formData.size,
           is_chunked: isChunked,
           chunk_count: chunkCount
-        })
-      });
+        }).eq('id', app.id);
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to update application');
+        if (updateError) throw updateError;
       }
 
       setUploadStatus('done');
