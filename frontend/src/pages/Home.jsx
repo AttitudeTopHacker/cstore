@@ -7,7 +7,6 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../context/AuthContext';
-import config, { fetchWithTimeout } from '../config';
 import { supabase } from '../supabaseClient';
 import ProgressModal from '../components/ProgressModal';
 import { DownloadManager } from '../utils/DownloadManager';
@@ -77,30 +76,16 @@ const Home = () => {
 
   const fetchApps = async () => {
     try {
-      const response = await fetchWithTimeout(`${config.API_BASE_URL}/apps`, {}, 3500);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setApps(data);
-          return;
-        }
-      }
-      throw new Error(`Backend unavailable or returned status ${response?.status}`);
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('apps')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setApps(data || []);
     } catch (err) {
-      console.warn('Backend unavailable, falling back to direct Supabase query:', err.message);
-      try {
-        const { data, error } = await supabase
-          .from('apps')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (!error && Array.isArray(data)) {
-          setApps(data);
-          return;
-        }
-        if (error) console.error('Supabase query error:', error);
-      } catch (sbErr) {
-        console.error('Supabase direct query failed:', sbErr);
-      }
+      console.error('Supabase direct query failed:', err);
       setApps([]);
     } finally {
       setLoading(false);
@@ -126,15 +111,8 @@ const Home = () => {
     });
 
     try {
-      // 1. Track download on server (fallback to direct RPC)
-      fetch(`${config.API_BASE_URL}/download/${id}`, { 
-        method: 'PUT',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      })
-      .catch(async (e) => {
+      // 1. Direct Supabase download tracking
+      (async () => {
         try {
           await supabase.rpc('increment_download_count', { app_id: id });
           if (user?.id) {
@@ -143,7 +121,7 @@ const Home = () => {
         } catch (rpcErr) {
           console.warn('Direct Supabase tracking fallback:', rpcErr);
         }
-      });
+      })();
 
       // 2. Download file
       let path;

@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, LogIn, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { useAuth, isAdminUser } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import config, { fetchWithTimeout } from '../config';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -65,63 +64,46 @@ const Login = () => {
     }
 
     try {
-      const res = await fetchWithTimeout(`${config.API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      }, 4000);
-      if (res.ok) {
-        const data = await res.json();
-        if (isAdminUser(data.user)) {
-          data.user.role = 'admin';
-        }
-        login(data.user, data.token);
+      // 2. Direct Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
+      });
+
+      if (!authError && authData?.user) {
+        const isUserAdmin = isAdminUser(authData.user.email);
+        const u = {
+          id: authData.user.id,
+          name: authData.user.user_metadata?.full_name || authData.user.email.split('@')[0],
+          email: authData.user.email,
+          role: isUserAdmin ? 'admin' : 'user'
+        };
+        login(u, authData.session?.access_token || 'supabase_token');
         setStatus({ loading: false, error: null });
-        navigate(data.user?.role === 'admin' ? '/admin' : '/dashboard');
+        navigate(isUserAdmin ? '/admin' : '/dashboard');
         return;
       }
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'Login server error');
-    } catch (err) {
-      console.warn('Backend login failed, attempting direct Supabase login...', err.message);
-      try {
-        // Try Supabase Auth first
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password
-        });
-        if (!authError && authData?.user) {
-          const isUserAdmin = isAdminUser(authData.user.email);
-          const u = {
-            id: authData.user.id,
-            name: authData.user.user_metadata?.full_name || authData.user.email.split('@')[0],
-            email: authData.user.email,
-            role: isUserAdmin ? 'admin' : 'user'
-          };
-          login(u, authData.session?.access_token || 'supabase_token');
-          setStatus({ loading: false, error: null });
-          navigate(isUserAdmin ? '/admin' : '/dashboard');
-          return;
-        }
 
-        // Fallback: Check users table by email or name
-        const { data: userRow } = await supabase
-          .from('users')
-          .select('*')
-          .or(`email.eq.${formData.email},name.eq.${formData.email}`)
-          .single();
-        if (userRow && userRow.status !== 'suspended') {
-          if (isAdminUser(userRow)) {
-            userRow.role = 'admin';
-          }
-          login(userRow, 'supabase_token');
-          setStatus({ loading: false, error: null });
-          navigate(userRow.role === 'admin' ? '/admin' : '/dashboard');
-          return;
+      // 3. Fallback: Check users table by email or name
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('*')
+        .or(`email.eq.${formData.email},name.eq.${formData.email}`)
+        .maybeSingle();
+
+      if (userRow && userRow.status !== 'suspended') {
+        if (isAdminUser(userRow)) {
+          userRow.role = 'admin';
         }
-      } catch (sbErr) {
-        console.error('Supabase fallback error:', sbErr);
+        login(userRow, 'supabase_token');
+        setStatus({ loading: false, error: null });
+        navigate(userRow.role === 'admin' ? '/admin' : '/dashboard');
+        return;
       }
+
+      throw new Error(authError?.message || 'Invalid email or password.');
+    } catch (err) {
+      console.error('Login error:', err);
       setStatus({ loading: false, error: err.message || 'Login failed.' });
     }
   };

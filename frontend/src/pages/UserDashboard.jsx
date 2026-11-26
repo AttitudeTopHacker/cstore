@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Download, Calendar, Mail, LayoutGrid, LogOut, Package, Upload, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import config, { fetchWithTimeout } from '../config';
 import { supabase } from '../supabaseClient';
 import ConfirmModal from '../components/ConfirmModal';
 import UpdateAppModal from '../components/UpdateAppModal';
@@ -20,50 +19,25 @@ const UserDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const headers = { Authorization: `Bearer ${token}` };
-      let profileData = user;
-      let downloadsData = [];
-      let appsData = [];
+      setLoading(true);
+      const currentUserId = user?.id;
 
-      try {
-        const [profileRes, downloadsRes, appsRes] = await Promise.all([
-          fetchWithTimeout(`${config.API_BASE_URL}/user/profile`, { headers }, 3500),
-          fetchWithTimeout(`${config.API_BASE_URL}/user/downloads`, { headers }, 3500),
-          fetchWithTimeout(`${config.API_BASE_URL}/apps`, {}, 3500),
-        ]);
-        if (profileRes.ok) profileData = await profileRes.json();
-        if (downloadsRes.ok) downloadsData = await downloadsRes.json();
-        if (appsRes.ok) appsData = await appsRes.json();
-      } catch (backendErr) {
-        console.warn('Backend unavailable for UserDashboard, using direct Supabase...', backendErr.message);
-      }
+      const [appsRes, downloadsRes] = await Promise.all([
+        supabase.from('apps').select('*').order('created_at', { ascending: false }),
+        currentUserId
+          ? supabase.from('downloads').select('id, downloaded_at, apps (id, name, version, icon_url)').eq('user_id', currentUserId).order('downloaded_at', { ascending: false })
+          : Promise.resolve({ data: [] })
+      ]);
 
-      // If apps was not fetched from backend, get from Supabase
-      if (!Array.isArray(appsData) || appsData.length === 0) {
-        const { data: sbApps } = await supabase.from('apps').select('*').order('created_at', { ascending: false });
-        if (Array.isArray(sbApps)) appsData = sbApps;
-      }
+      const allApps = appsRes.data || [];
+      const userDownloads = downloadsRes.data || [];
 
-      // If downloads was not fetched from backend, try Supabase
-      const currentUserId = profileData?.id || user?.id;
-      if ((!Array.isArray(downloadsData) || downloadsData.length === 0) && currentUserId) {
-        try {
-          const { data: sbDownloads } = await supabase
-            .from('downloads')
-            .select('id, downloaded_at, apps (id, name, version, icon_url)')
-            .eq('user_id', currentUserId)
-            .order('downloaded_at', { ascending: false });
-          if (Array.isArray(sbDownloads)) downloadsData = sbDownloads;
-        } catch (sbErr) {
-          // ignore if table not present
-        }
-      }
-
-      setProfile(profileData || user);
-      setDownloads(Array.isArray(downloadsData) ? downloadsData : []);
-      
-      if (Array.isArray(appsData)) {
-        setMyApps(appsData.filter(app => app.user_id === currentUserId));
+      setProfile(user);
+      setDownloads(userDownloads);
+      if (currentUserId) {
+        setMyApps(allApps.filter(app => app.user_id === currentUserId));
+      } else {
+        setMyApps([]);
       }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);

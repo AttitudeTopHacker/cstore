@@ -11,7 +11,7 @@ import UploadApp from './pages/UploadApp';
 import './index.css';
 
 function App() {
-  console.log('CStore v1.1.3 Loaded - 2026-05-09');
+  console.log('CStore v1.1.4 Loaded - Pure Supabase');
   return (
     <Router>
       <div className="App">

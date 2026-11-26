@@ -3,7 +3,6 @@ import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { supabase } from '../supabaseClient';
-import config from '../config';
 
 export const isAdminUser = (userOrEmail) => {
   if (!userOrEmail) return false;
@@ -37,52 +36,45 @@ export const AuthProvider = ({ children }) => {
   const [isNewUser, setIsNewUser] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
 
-  // ─── Helper: sync supabase user with our backend ───────────────────────────
-  const syncUserWithBackend = async (supabaseUser) => {
+  // ─── Helper: sync supabase user directly ──────────────────────────────────
+  const syncUserWithSupabase = async (supabaseUser) => {
+    const isUserAdmin = isAdminUser(supabaseUser.email);
+    let userData = {
+      id: supabaseUser.id,
+      name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
+      email: supabaseUser.email,
+      role: isUserAdmin ? 'admin' : 'user'
+    };
+
     try {
-      // Timeout after 5s to avoid freezing if Render is suspended or cold
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', supabaseUser.email)
+        .maybeSingle();
 
-      const res = await fetch(`${config.API_BASE_URL}/auth/google-sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: supabaseUser.email,
-          name: supabaseUser.user_metadata?.full_name || supabaseUser.email,
-          supabase_id: supabaseUser.id,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      if (data.isNew) {
-        setIsNewUser(true);
-        setPendingUser({
-          name: supabaseUser.user_metadata?.full_name || supabaseUser.email.split('@')[0],
-          email: supabaseUser.email,
-          supabase_id: supabaseUser.id
-        });
-      } else if (data.user) {
-        _setLogin(data.user, data.token);
+      if (existingUser) {
+        userData = {
+          ...existingUser,
+          role: isUserAdmin ? 'admin' : (existingUser.role || 'user')
+        };
+      } else {
+        await supabase.from('users').insert([{
+          id: supabaseUser.id,
+          name: userData.name,
+          email: userData.email,
+          role: userData.role,
+          status: 'active'
+        }]);
       }
-      return data;
-    } catch (err) {
-      console.warn('Backend sync failed, falling back to direct Supabase auth:', err.message);
-      // Fallback: If backend is down, log user in directly from supabaseUser
-      const isUserAdmin = isAdminUser(supabaseUser.email);
-      const directUser = {
-        id: supabaseUser.id,
-        name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
-        email: supabaseUser.email,
-        role: isUserAdmin ? 'admin' : 'user'
-      };
-      _setLogin(directUser, 'direct_supabase_session');
-      return { isNew: false, user: directUser, token: 'direct_supabase_session' };
+    } catch (e) {
+      console.warn('Direct Supabase user sync:', e.message);
     }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const sessionToken = session?.access_token || 'direct_supabase_session';
+    _setLogin(userData, sessionToken);
+    return { isNew: false, user: userData, token: sessionToken };
   };
 
   // ─── Internal login setter ──────────────────────────────────────────────────
@@ -109,7 +101,7 @@ export const AuthProvider = ({ children }) => {
       // Check live Supabase session (handles web OAuth redirect hash)
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        await syncUserWithBackend(session.user);
+        await syncUserWithSupabase(session.user);
       }
 
       setLoading(false);
@@ -149,7 +141,7 @@ export const AuthProvider = ({ children }) => {
               // onAuthStateChange may still fire — do nothing extra
             } else if (data?.session?.user) {
               console.log('[DeepLink] PKCE success:', data.session.user.email);
-              await syncUserWithBackend(data.session.user);
+              await syncUserWithSupabase(data.session.user);
             }
           } else if (accessToken && refreshToken) {
             console.log('[DeepLink] implicit tokens found, setting session...');
@@ -158,18 +150,18 @@ export const AuthProvider = ({ children }) => {
               refresh_token: refreshToken,
             });
             if (!error && data?.session?.user) {
-              await syncUserWithBackend(data.session.user);
+              await syncUserWithSupabase(data.session.user);
             }
           } else {
             // Supabase may have already handled it via detectSessionInUrl
             console.log('[DeepLink] no code/token in URL, checking session...');
             const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) await syncUserWithBackend(session.user);
+            if (session?.user) await syncUserWithSupabase(session.user);
           }
         } catch (err) {
           console.error('[DeepLink] parse error:', err);
           const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) await syncUserWithBackend(session.user);
+          if (session?.user) await syncUserWithSupabase(session.user);
         }
       });
     };
@@ -181,7 +173,7 @@ export const AuthProvider = ({ children }) => {
       async (event, session) => {
         console.log('[Auth] event:', event);
         if (session?.user) {
-          await syncUserWithBackend(session.user);
+          await syncUserWithSupabase(session.user);
         } else if (event === 'SIGNED_OUT') {
           // Do not wipe credentials if user was manually logged in as admin or persistent user
           const storedToken = localStorage.getItem('cstore_token');
@@ -256,29 +248,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   const completeProfile = async (profileData) => {
+    const isUserAdmin = isAdminUser(profileData.email);
+    const updatedUser = {
+      id: profileData.supabase_id || profileData.id || Date.now().toString(),
+      name: profileData.name,
+      email: profileData.email,
+      role: isUserAdmin ? 'admin' : 'user'
+    };
     try {
-      const res = await fetch(`${config.API_BASE_URL}/auth/complete-profile`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profileData),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        _setLogin(data.user, data.token);
-        return data;
-      }
-      throw new Error('Backend complete-profile returned non-200');
-    } catch (err) {
-      console.warn('Backend unavailable, completing profile locally with Supabase data...', err.message);
-      const fallbackUser = {
-        id: profileData.supabase_id || profileData.id || Date.now().toString(),
-        name: profileData.name,
-        email: profileData.email,
-        role: 'user'
-      };
-      _setLogin(fallbackUser, 'direct_supabase_session');
-      return { user: fallbackUser, token: 'direct_supabase_session' };
+      await supabase.from('users').upsert([updatedUser]);
+    } catch (e) {
+      console.warn('Profile direct save:', e.message);
     }
+    _setLogin(updatedUser, 'direct_supabase_session');
+    return { user: updatedUser, token: 'direct_supabase_session' };
   };
 
   const isAdmin    = user?.role === 'admin' || isAdminUser(user);

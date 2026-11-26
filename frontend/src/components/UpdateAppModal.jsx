@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import config from '../config';
 
 const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
   if (!isOpen || !app) return null;
@@ -137,45 +136,32 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
         finalIconUrl = publicUrl;
       }
 
-      // 3. Update App via Backend API with Supabase direct fallback
+      // 3. Archive previous version in app_history and update app in Supabase
       setUploadStatus('saving');
       try {
-        const response = await fetch(`${config.API_BASE_URL}/apps/${app.id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: formData.name,
-            version: formData.version,
-            description: formData.description,
-            file_url: finalFileUrl,
-            icon_url: finalIconUrl,
-            size: formData.size,
-            is_chunked: isChunked,
-            chunk_count: chunkCount
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Backend update failed');
-        }
-      } catch (backendErr) {
-        console.warn('Backend unavailable, updating directly in Supabase...', backendErr.message);
-        const { error: updateError } = await supabase.from('apps').update({
-          name: formData.name,
-          version: formData.version,
-          description: formData.description,
-          file_url: finalFileUrl,
-          icon_url: finalIconUrl,
-          size: formData.size,
-          is_chunked: isChunked,
-          chunk_count: chunkCount
-        }).eq('id', app.id);
-
-        if (updateError) throw updateError;
+        await supabase.from('app_history').insert([{
+          app_id: app.id,
+          version: app.version || 'v1.0.0',
+          file_url: app.file_url,
+          size: app.size || 'Unknown',
+          description: app.description || ''
+        }]);
+      } catch (histErr) {
+        console.warn('History archive notice:', histErr.message);
       }
+
+      const { error: updateError } = await supabase.from('apps').update({
+        name: formData.name,
+        version: formData.version,
+        description: formData.description,
+        file_url: finalFileUrl,
+        icon_url: finalIconUrl,
+        size: formData.size,
+        is_chunked: isChunked,
+        chunk_count: chunkCount
+      }).eq('id', app.id);
+
+      if (updateError) throw updateError;
 
       setUploadStatus('done');
       setTimeout(() => {

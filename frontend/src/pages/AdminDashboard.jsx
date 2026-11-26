@@ -7,7 +7,6 @@ import {
   UserX, UserCheck, Store
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import config, { fetchWithTimeout } from '../config';
 import ConfirmModal from '../components/ConfirmModal';
 import UpdateAppModal from '../components/UpdateAppModal';
 
@@ -36,51 +35,28 @@ const AdminDashboard = () => {
   const fetchAll = async () => {
     setLoading(true);
     setFetchError(null);
-    let loadedApps = [];
-    let loadedUsers = [];
-    let loadedStats = null;
 
     try {
-      const [statsRes, appsRes, usersRes] = await Promise.all([
-        fetchWithTimeout(`${config.API_BASE_URL}/admin/stats`, { headers }, 3500),
-        fetchWithTimeout(`${config.API_BASE_URL}/apps`, {}, 3500),
-        fetchWithTimeout(`${config.API_BASE_URL}/admin/users`, { headers }, 3500),
+      const [appsRes, usersRes] = await Promise.all([
+        supabase.from('apps').select('*').order('created_at', { ascending: false }),
+        supabase.from('users').select('*').order('created_at', { ascending: false }),
       ]);
 
-      if (statsRes.ok) loadedStats = await statsRes.json();
-      if (appsRes.ok) loadedApps = await appsRes.json();
-      if (usersRes.ok) loadedUsers = await usersRes.json();
-    } catch (err) { 
-      console.warn('Backend fetch failed for AdminDashboard, falling back to Supabase...', err.message);
-    }
+      if (appsRes.error) throw appsRes.error;
+      const loadedApps = appsRes.data || [];
+      const loadedUsers = usersRes.data || [];
+      const totalDownloads = loadedApps.reduce((acc, a) => acc + (a.download_count || 0), 0);
 
-    try {
-      // Supabase direct fallback for apps
-      if (!Array.isArray(loadedApps) || loadedApps.length === 0) {
-        const { data: sbApps } = await supabase.from('apps').select('*').order('created_at', { ascending: false });
-        if (Array.isArray(sbApps)) loadedApps = sbApps;
-      }
-      // Supabase direct fallback for users
-      if (!Array.isArray(loadedUsers) || loadedUsers.length === 0) {
-        const { data: sbUsers } = await supabase.from('users').select('*').order('created_at', { ascending: false });
-        if (Array.isArray(sbUsers)) loadedUsers = sbUsers;
-      }
-      // Compute stats directly if backend stats not available
-      if (!loadedStats) {
-        const totalDownloads = (loadedApps || []).reduce((acc, a) => acc + (a.download_count || 0), 0);
-        loadedStats = {
-          total_apps: (loadedApps || []).length,
-          total_users: (loadedUsers || []).length,
-          total_downloads: totalDownloads
-        };
-      }
-
-      setApps(loadedApps || []);
-      setUsers(loadedUsers || []);
-      setStats(loadedStats);
-    } catch (fallbackErr) {
-      console.error('Supabase fallback error:', fallbackErr);
-      setFetchError(`Could not load data: ${fallbackErr.message}`);
+      setApps(loadedApps);
+      setUsers(loadedUsers);
+      setStats({
+        total_apps: loadedApps.length,
+        total_users: loadedUsers.length,
+        total_downloads: totalDownloads
+      });
+    } catch (err) {
+      console.error('AdminDashboard load error:', err);
+      setFetchError(err.message);
     } finally {
       setLoading(false);
     }
@@ -96,14 +72,8 @@ const AdminDashboard = () => {
       type: 'danger',
       onConfirm: async () => {
         try {
-          try {
-            const res = await fetch(`${config.API_BASE_URL}/admin/apps/${id}`, { method: 'DELETE', headers });
-            if (!res.ok) throw new Error('Backend delete failed');
-          } catch (e) {
-            console.warn('Backend unavailable, deleting directly from Supabase...');
-            const { error: delErr } = await supabase.from('apps').delete().eq('id', id);
-            if (delErr) throw delErr;
-          }
+          const { error: delErr } = await supabase.from('apps').delete().eq('id', id);
+          if (delErr) throw delErr;
           setApps(apps.filter(a => a.id !== id));
           setModalConfig(prev => ({ ...prev, isOpen: false }));
         } catch (err) { alert(err.message); }
@@ -120,18 +90,8 @@ const AdminDashboard = () => {
       type: newStatus === 'suspended' ? 'danger' : 'primary',
       onConfirm: async () => {
         try {
-          try {
-            const res = await fetch(`${config.API_BASE_URL}/admin/users/${userId}/status`, {
-              method: 'PATCH',
-              headers: { ...headers, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: newStatus })
-            });
-            if (!res.ok) throw new Error('Backend status update failed');
-          } catch (e) {
-            console.warn('Backend unavailable, updating user status directly in Supabase...');
-            const { error: patchErr } = await supabase.from('users').update({ status: newStatus }).eq('id', userId);
-            if (patchErr) throw patchErr;
-          }
+          const { error: patchErr } = await supabase.from('users').update({ status: newStatus }).eq('id', userId);
+          if (patchErr) throw patchErr;
           setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus } : u));
           setModalConfig(prev => ({ ...prev, isOpen: false }));
         } catch (err) { alert(err.message); }
@@ -147,14 +107,8 @@ const AdminDashboard = () => {
       type: 'danger',
       onConfirm: async () => {
         try {
-          try {
-            const res = await fetch(`${config.API_BASE_URL}/admin/users/${id}`, { method: 'DELETE', headers });
-            if (!res.ok) throw new Error('Backend user delete failed');
-          } catch (e) {
-            console.warn('Backend unavailable, deleting user directly from Supabase...');
-            const { error: delErr } = await supabase.from('users').delete().eq('id', id);
-            if (delErr) throw delErr;
-          }
+          const { error: delErr } = await supabase.from('users').delete().eq('id', id);
+          if (delErr) throw delErr;
           setUsers(users.filter(u => u.id !== id));
           setModalConfig(prev => ({ ...prev, isOpen: false }));
         } catch (err) { alert(err.message); }
@@ -187,43 +141,20 @@ const AdminDashboard = () => {
       const { data: { publicUrl: apkPublicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(apkFileName);
       finalFileUrl = apkPublicUrl;
 
-      // 3. Send metadata: try backend first, fallback to direct Supabase
-      try {
-        const res = await fetch(`${config.API_BASE_URL}/upload`, { 
-          method: 'POST', 
-          headers: { ...headers, 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({
-            name: formData.name,
-            version: formData.version,
-            description: formData.description,
-            file_url: finalFileUrl,
-            icon_url: iconUrl,
-            size: formData.size || 'Unknown',
-            is_chunked: false,
-            chunk_count: 1
-          })
-        });
-
-        if (!res.ok) { 
-          const d = await res.json().catch(() => ({})); 
-          throw new Error(d.error || 'Server upload failed'); 
-        }
-      } catch (backendErr) {
-        console.warn('Backend unavailable for admin upload, inserting directly into Supabase...', backendErr.message);
-        const { error: dbError } = await supabase.from('apps').insert([{
-          name: formData.name,
-          version: formData.version || 'v1.0.0',
-          description: formData.description || '',
-          file_url: finalFileUrl,
-          icon_url: iconUrl,
-          download_count: 0,
-          size: formData.size || 'Unknown',
-          is_chunked: false,
-          chunk_count: 1,
-          user_id: null
-        }]);
-        if (dbError) throw dbError;
-      }
+      // 3. Send metadata: direct Supabase insert
+      const { error: dbError } = await supabase.from('apps').insert([{
+        name: formData.name,
+        version: formData.version || 'v1.0.0',
+        description: formData.description || '',
+        file_url: finalFileUrl,
+        icon_url: iconUrl,
+        download_count: 0,
+        size: formData.size || 'Unknown',
+        is_chunked: false,
+        chunk_count: 1,
+        user_id: null
+      }]);
+      if (dbError) throw dbError;
 
       setActionStatus({ loading: false, success: 'App published successfully!', error: null });
       setFormData({ name: '', version: '', description: '', size: '' });
@@ -297,7 +228,6 @@ const AdminDashboard = () => {
           <div style={{ textAlign: 'center' }}>
             <Loader2 size={40} className="animate-spin" style={{ marginBottom: '1rem', color: 'var(--primary)' }} />
             <p>Loading Dashboard...</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.6 }}>Connecting to: {config.API_BASE_URL}</p>
           </div>
         </div>
       ) : fetchError ? (
@@ -323,9 +253,9 @@ const AdminDashboard = () => {
           {/* Stat Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
             {[
-              { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: <Users size={24} />, color: '#6366f1' },
-              { label: 'Total Apps', value: stats?.totalApps ?? 0, icon: <Package size={24} />, color: '#a855f7' },
-              { label: 'Total Downloads', value: stats?.totalDownloads ?? 0, icon: <Download size={24} />, color: '#10b981' },
+              { label: 'Total Users', value: stats?.total_users ?? stats?.totalUsers ?? 0, icon: <Users size={24} />, color: '#6366f1' },
+              { label: 'Total Apps', value: stats?.total_apps ?? stats?.totalApps ?? 0, icon: <Package size={24} />, color: '#a855f7' },
+              { label: 'Total Downloads', value: stats?.total_downloads ?? stats?.totalDownloads ?? 0, icon: <Download size={24} />, color: '#10b981' },
             ].map((s) => (
               <div key={s.label} className="glass" style={{ padding: '1.75rem', display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                 <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: `${s.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s.color, flexShrink: 0 }}>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Download, AlertCircle, Loader2, X, Clock, FileText } from 'lucide-react';
-import config, { fetchWithTimeout } from '../config';
 import { supabase } from '../supabaseClient';
 
 const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
@@ -16,30 +15,15 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetchWithTimeout(`${config.API_BASE_URL}/apps/${app.id}/history`, {}, 3500);
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setHistory(data);
-            return;
-          }
-        }
-        throw new Error('Backend history unavailable');
-      } catch (err) {
-        console.warn('Backend history unavailable, fetching directly from Supabase...', err.message);
-        try {
-          const { data, error: sbError } = await supabase
-            .from('app_history')
-            .select('*')
-            .eq('app_id', app.id)
-            .order('updated_at', { ascending: false });
+        const { data, error: sbError } = await supabase
+          .from('app_history')
+          .select('*')
+          .eq('app_id', app.id)
+          .order('updated_at', { ascending: false });
 
-          if (!sbError && Array.isArray(data) && data.length > 0) {
-            setHistory(data);
-            return;
-          }
-        } catch (sbErr) {
-          console.error('Supabase history fetch error:', sbErr);
+        if (!sbError && Array.isArray(data) && data.length > 0) {
+          setHistory(data);
+          return;
         }
 
         // Fallback: If no history records exist yet, show current active version
@@ -51,6 +35,9 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
           size: app.size || 'Unknown',
           file_url: app.file_url
         }]);
+      } catch (err) {
+        console.error('History fetch error:', err);
+        setError(err.message);
       } finally {
         setLoading(false);
       }
