@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, LogIn, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, isAdminUser } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import config from '../config';
 
@@ -37,6 +37,33 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus({ loading: true, error: null });
+
+    const trimmedInput = (formData.email || '').trim().toLowerCase();
+    const inputPassword = formData.password;
+
+    // 1. Direct Master Admin check (works 100% whether backend is online or offline)
+    const isAdminAccount = (
+      trimmedInput === 'cstore' ||
+      trimmedInput === 'admin' ||
+      trimmedInput === 'aattitudetophacker@gmail.com' ||
+      trimmedInput === 'attitudetophacker@gmail.com' ||
+      trimmedInput === 'mohdsalman4151@gmail.com' ||
+      trimmedInput === 'salman.movin@gmail.com'
+    );
+
+    if (isAdminAccount && inputPassword === 'Salman@134') {
+      const adminUser = {
+        id: 'admin',
+        name: 'Admin (Salman)',
+        email: trimmedInput,
+        role: 'admin'
+      };
+      login(adminUser, 'cstore_admin_token');
+      setStatus({ loading: false, error: null });
+      navigate('/admin');
+      return;
+    }
+
     try {
       const res = await fetch(`${config.API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -45,8 +72,12 @@ const Login = () => {
       });
       if (res.ok) {
         const data = await res.json();
+        if (isAdminUser(data.user)) {
+          data.user.role = 'admin';
+        }
         login(data.user, data.token);
         setStatus({ loading: false, error: null });
+        navigate(data.user?.role === 'admin' ? '/admin' : '/dashboard');
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -60,22 +91,28 @@ const Login = () => {
           password: formData.password
         });
         if (!authError && authData?.user) {
+          const isUserAdmin = isAdminUser(authData.user.email);
           const u = {
             id: authData.user.id,
             name: authData.user.user_metadata?.full_name || authData.user.email.split('@')[0],
             email: authData.user.email,
-            role: (authData.user.email === 'salman.movin@gmail.com' || authData.user.email?.includes('admin')) ? 'admin' : 'user'
+            role: isUserAdmin ? 'admin' : 'user'
           };
           login(u, authData.session?.access_token || 'supabase_token');
           setStatus({ loading: false, error: null });
+          navigate(isUserAdmin ? '/admin' : '/dashboard');
           return;
         }
 
         // Fallback: Check users table
         const { data: userRow } = await supabase.from('users').select('*').eq('email', formData.email).single();
         if (userRow && userRow.status !== 'suspended') {
+          if (isAdminUser(userRow)) {
+            userRow.role = 'admin';
+          }
           login(userRow, 'supabase_token');
           setStatus({ loading: false, error: null });
+          navigate(userRow.role === 'admin' ? '/admin' : '/dashboard');
           return;
         }
       } catch (sbErr) {

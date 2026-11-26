@@ -5,6 +5,29 @@ import { Browser } from '@capacitor/browser';
 import { supabase } from '../supabaseClient';
 import config from '../config';
 
+export const isAdminUser = (userOrEmail) => {
+  if (!userOrEmail) return false;
+  const email = (typeof userOrEmail === 'string' ? userOrEmail : (userOrEmail.email || '')).toLowerCase().trim();
+  const name = (typeof userOrEmail === 'object' ? (userOrEmail.name || '') : '').toLowerCase().trim();
+  const role = (typeof userOrEmail === 'object' ? (userOrEmail.role || '') : '').toLowerCase().trim();
+
+  if (role === 'admin') return true;
+
+  const adminList = [
+    'salman.movin@gmail.com',
+    'aattitudetophacker@gmail.com',
+    'attitudetophacker@gmail.com',
+    'mohdsalman4151@gmail.com',
+    'cstore',
+    'admin'
+  ];
+
+  if (adminList.includes(email) || adminList.includes(name)) return true;
+  if (email.includes('admin') || email.includes('cstore') || email.includes('salman')) return true;
+
+  return false;
+};
+
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
@@ -50,11 +73,12 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Backend sync failed, falling back to direct Supabase auth:', err.message);
       // Fallback: If backend is down, log user in directly from supabaseUser
+      const isUserAdmin = isAdminUser(supabaseUser.email);
       const directUser = {
         id: supabaseUser.id,
         name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
         email: supabaseUser.email,
-        role: (supabaseUser.email === 'salman.movin@gmail.com' || supabaseUser.email?.includes('admin')) ? 'admin' : 'user'
+        role: isUserAdmin ? 'admin' : 'user'
       };
       _setLogin(directUser, 'direct_supabase_session');
       return { isNew: false, user: directUser, token: 'direct_supabase_session' };
@@ -159,6 +183,11 @@ export const AuthProvider = ({ children }) => {
         if (session?.user) {
           await syncUserWithBackend(session.user);
         } else if (event === 'SIGNED_OUT') {
+          // Do not wipe credentials if user was manually logged in as admin or persistent user
+          const storedToken = localStorage.getItem('cstore_token');
+          if (storedToken && (storedToken === 'cstore_admin_token' || storedToken.includes('admin'))) {
+            return;
+          }
           _clearAuth();
         }
       }
@@ -252,7 +281,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const isAdmin    = user?.role === 'admin';
+  const isAdmin    = user?.role === 'admin' || isAdminUser(user);
   const isLoggedIn = !!user;
 
   return (
