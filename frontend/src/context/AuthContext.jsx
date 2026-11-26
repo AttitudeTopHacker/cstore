@@ -94,11 +94,60 @@ export const AuthProvider = ({ children }) => {
       const storedToken = localStorage.getItem('cstore_token');
       const storedUser  = localStorage.getItem('cstore_user');
       if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setToken(storedToken);
+          setUser(parsedUser);
+        } catch (e) {
+          console.warn('Failed parsing stored user:', e);
+        }
       }
 
-      // Check live Supabase session (handles web OAuth redirect hash)
+      // ── Web OAuth PKCE / Token Exchange ─────────────────────────────────────
+      if (!Capacitor.isNativePlatform()) {
+        try {
+          // 1. Check for ?code=... (Supabase v2 PKCE flow)
+          if (window.location.search) {
+            const searchParams = new URLSearchParams(window.location.search);
+            const code = searchParams.get('code');
+            if (code) {
+              console.log('[WebAuth] PKCE code found in URL, exchanging...');
+              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+              if (!error && data?.session?.user) {
+                await syncUserWithSupabase(data.session.user);
+                window.history.replaceState({}, document.title, window.location.pathname);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+
+          // 2. Check for #access_token=... (Implicit flow)
+          if (window.location.hash) {
+            const hash = window.location.hash.replace('#', '');
+            const hashParams = new URLSearchParams(hash);
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+            if (accessToken && refreshToken) {
+              console.log('[WebAuth] Implicit tokens found in hash, setting session...');
+              const { data, error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+              });
+              if (!error && data?.session?.user) {
+                await syncUserWithSupabase(data.session.user);
+                window.history.replaceState({}, document.title, window.location.pathname);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[WebAuth] URL OAuth exchange error:', e);
+        }
+      }
+
+      // Check live Supabase session
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await syncUserWithSupabase(session.user);
