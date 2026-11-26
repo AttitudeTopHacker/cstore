@@ -40,9 +40,9 @@ export const AuthProvider = ({ children }) => {
   // ─── Helper: sync supabase user with our backend ───────────────────────────
   const syncUserWithBackend = async (supabaseUser) => {
     try {
-      // Timeout after 20s to handle Render cold starts
+      // Timeout after 5s to avoid freezing if Render is suspended or cold
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const res = await fetch(`${config.API_BASE_URL}/auth/google-sync`, {
         method: 'POST',

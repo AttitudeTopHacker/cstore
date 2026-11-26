@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Download, AlertCircle, Loader2, X, Clock, FileText } from 'lucide-react';
-import config from '../config';
+import config, { fetchWithTimeout } from '../config';
+import { supabase } from '../supabaseClient';
 
 const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
   if (!isOpen || !app) return null;
@@ -15,13 +16,41 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${config.API_BASE_URL}/apps/${app.id}/history`);
-        if (!response.ok) throw new Error('Failed to load version history.');
-        const data = await response.json();
-        setHistory(data);
+        const response = await fetchWithTimeout(`${config.API_BASE_URL}/apps/${app.id}/history`, {}, 3500);
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setHistory(data);
+            return;
+          }
+        }
+        throw new Error('Backend history unavailable');
       } catch (err) {
-        console.error(err);
-        setError(err.message);
+        console.warn('Backend history unavailable, fetching directly from Supabase...', err.message);
+        try {
+          const { data, error: sbError } = await supabase
+            .from('app_history')
+            .select('*')
+            .eq('app_id', app.id)
+            .order('updated_at', { ascending: false });
+
+          if (!sbError && Array.isArray(data) && data.length > 0) {
+            setHistory(data);
+            return;
+          }
+        } catch (sbErr) {
+          console.error('Supabase history fetch error:', sbErr);
+        }
+
+        // Fallback: If no history records exist yet, show current active version
+        setHistory([{
+          id: app.id,
+          version: app.version || 'v1.0.0',
+          updated_at: app.created_at || new Date().toISOString(),
+          description: app.description || 'Current active version release.',
+          size: app.size || 'Unknown',
+          file_url: app.file_url
+        }]);
       } finally {
         setLoading(false);
       }

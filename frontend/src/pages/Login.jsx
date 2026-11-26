@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, LogIn, AlertCircle, Loader2, ShieldCheck, User } from 'lucide-react';
 import { useAuth, isAdminUser } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import config from '../config';
+import config, { fetchWithTimeout } from '../config';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -65,11 +65,11 @@ const Login = () => {
     }
 
     try {
-      const res = await fetch(`${config.API_BASE_URL}/auth/login`, {
+      const res = await fetchWithTimeout(`${config.API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
-      });
+      }, 4000);
       if (res.ok) {
         const data = await res.json();
         if (isAdminUser(data.user)) {
@@ -104,8 +104,12 @@ const Login = () => {
           return;
         }
 
-        // Fallback: Check users table
-        const { data: userRow } = await supabase.from('users').select('*').eq('email', formData.email).single();
+        // Fallback: Check users table by email or name
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('*')
+          .or(`email.eq.${formData.email},name.eq.${formData.email}`)
+          .single();
         if (userRow && userRow.status !== 'suspended') {
           if (isAdminUser(userRow)) {
             userRow.role = 'admin';

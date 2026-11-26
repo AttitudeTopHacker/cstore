@@ -7,7 +7,7 @@ import {
   UserX, UserCheck, Store
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import config from '../config';
+import config, { fetchWithTimeout } from '../config';
 import ConfirmModal from '../components/ConfirmModal';
 import UpdateAppModal from '../components/UpdateAppModal';
 
@@ -42,9 +42,9 @@ const AdminDashboard = () => {
 
     try {
       const [statsRes, appsRes, usersRes] = await Promise.all([
-        fetch(`${config.API_BASE_URL}/admin/stats`, { headers }),
-        fetch(`${config.API_BASE_URL}/apps`),
-        fetch(`${config.API_BASE_URL}/admin/users`, { headers }),
+        fetchWithTimeout(`${config.API_BASE_URL}/admin/stats`, { headers }, 3500),
+        fetchWithTimeout(`${config.API_BASE_URL}/apps`, {}, 3500),
+        fetchWithTimeout(`${config.API_BASE_URL}/admin/users`, { headers }, 3500),
       ]);
 
       if (statsRes.ok) loadedStats = await statsRes.json();
@@ -187,23 +187,44 @@ const AdminDashboard = () => {
       const { data: { publicUrl: apkPublicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(apkFileName);
       finalFileUrl = apkPublicUrl;
 
-      // 3. Send metadata to backend
-      const res = await fetch(`${config.API_BASE_URL}/upload`, { 
-        method: 'POST', 
-        headers: { ...headers, 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({
+      // 3. Send metadata: try backend first, fallback to direct Supabase
+      try {
+        const res = await fetch(`${config.API_BASE_URL}/upload`, { 
+          method: 'POST', 
+          headers: { ...headers, 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({
+            name: formData.name,
+            version: formData.version,
+            description: formData.description,
+            file_url: finalFileUrl,
+            icon_url: iconUrl,
+            size: formData.size || 'Unknown',
+            is_chunked: false,
+            chunk_count: 1
+          })
+        });
+
+        if (!res.ok) { 
+          const d = await res.json().catch(() => ({})); 
+          throw new Error(d.error || 'Server upload failed'); 
+        }
+      } catch (backendErr) {
+        console.warn('Backend unavailable for admin upload, inserting directly into Supabase...', backendErr.message);
+        const { error: dbError } = await supabase.from('apps').insert([{
           name: formData.name,
-          version: formData.version,
-          description: formData.description,
+          version: formData.version || 'v1.0.0',
+          description: formData.description || '',
           file_url: finalFileUrl,
           icon_url: iconUrl,
+          download_count: 0,
           size: formData.size || 'Unknown',
           is_chunked: false,
-          chunk_count: 1
-        })
-      });
+          chunk_count: 1,
+          user_id: null
+        }]);
+        if (dbError) throw dbError;
+      }
 
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setActionStatus({ loading: false, success: 'App published successfully!', error: null });
       setFormData({ name: '', version: '', description: '', size: '' });
       setFiles({ icon: null, apk: null });

@@ -7,7 +7,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../context/AuthContext';
-import config from '../config';
+import config, { fetchWithTimeout } from '../config';
 import { supabase } from '../supabaseClient';
 import ProgressModal from '../components/ProgressModal';
 import { DownloadManager } from '../utils/DownloadManager';
@@ -77,7 +77,7 @@ const Home = () => {
 
   const fetchApps = async () => {
     try {
-      const response = await fetch(`${config.API_BASE_URL}/apps`);
+      const response = await fetchWithTimeout(`${config.API_BASE_URL}/apps`, {}, 3500);
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -85,7 +85,7 @@ const Home = () => {
           return;
         }
       }
-      throw new Error(`Backend unavailable or returned status ${response.status}`);
+      throw new Error(`Backend unavailable or returned status ${response?.status}`);
     } catch (err) {
       console.warn('Backend unavailable, falling back to direct Supabase query:', err.message);
       try {
@@ -130,11 +130,18 @@ const Home = () => {
       fetch(`${config.API_BASE_URL}/download/${id}`, { 
         method: 'PUT',
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      }).catch(async (e) => {
+      })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      })
+      .catch(async (e) => {
         try {
           await supabase.rpc('increment_download_count', { app_id: id });
+          if (user?.id) {
+            await supabase.from('downloads').insert([{ user_id: user.id, app_id: id }]);
+          }
         } catch (rpcErr) {
-          console.error('Tracking failed', e);
+          console.warn('Direct Supabase tracking fallback:', rpcErr);
         }
       });
 
