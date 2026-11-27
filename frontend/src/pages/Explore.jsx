@@ -70,7 +70,7 @@ const Explore = () => {
         supabase.from('upcoming_releases').select('*').eq('is_published', false).order('created_at', { ascending: false }),
       ]);
 
-      if (appsRes.data) setApps(appsRes.data);
+      if (appsRes.data) setApps(appsRes.data.filter(app => !app.is_draft && app.icon_url));
       if (allAppsRes.data) setAllAppCatalog(allAppsRes.data);
       if (teamRes.data) setTeamMembers(teamRes.data);
       if (upcomingRes.data) setUpcomingReleases(upcomingRes.data);

@@ -65,3 +65,6 @@ ALTER TABLE apps ADD COLUMN IF NOT EXISTS upload_source TEXT DEFAULT 'manual';
 
 -- 8. Add build_source to 'upcoming_releases' table ('manual' or 'github')
 ALTER TABLE upcoming_releases ADD COLUMN IF NOT EXISTS build_source TEXT DEFAULT 'manual';
+
+-- 9. Add is_draft to 'apps' table (for Smart Draft CI/CD builds needing details)
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS is_draft BOOLEAN DEFAULT false;

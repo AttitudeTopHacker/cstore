@@ -65,6 +65,87 @@ const UserDashboard = () => {
   const [teaserLoading, setTeaserLoading] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
 
+  // Complete Draft Build Modal State
+  const [selectedDraftApp, setSelectedDraftApp] = useState(null);
+  const [draftForm, setDraftForm] = useState({ name: '', description: '', tagline: '' });
+  const [draftIconFile, setDraftIconFile] = useState(null);
+  const [draftIconPreview, setDraftIconPreview] = useState(null);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState('');
+  const [isClosingDraft, setIsClosingDraft] = useState(false);
+
+  const handleOpenDraftModal = (app) => {
+    setSelectedDraftApp(app);
+    setDraftForm({
+      name: app.name || '',
+      description: (app.description && !app.description.includes('Draft build')) ? app.description : '',
+      tagline: ''
+    });
+    setDraftIconFile(null);
+    setDraftIconPreview(app.icon_url || null);
+    setDraftError('');
+  };
+
+  const handleCloseDraftModal = () => {
+    setIsClosingDraft(true);
+    setTimeout(() => {
+      setSelectedDraftApp(null);
+      setIsClosingDraft(false);
+    }, 200);
+  };
+
+  const handlePublishDraft = async (e) => {
+    e.preventDefault();
+    if (!draftForm.name.trim()) {
+      setDraftError('App name is required');
+      return;
+    }
+    if (!draftIconFile && !draftIconPreview) {
+      setDraftError('Please choose an App Icon to go live');
+      return;
+    }
+    if (!draftForm.description.trim()) {
+      setDraftError('Please write a brief description for your app');
+      return;
+    }
+
+    setDraftLoading(true);
+    setDraftError('');
+
+    try {
+      let finalIconUrl = draftIconPreview;
+      if (draftIconFile) {
+        const iconFileName = `${Date.now()}-${draftIconFile.name.replace(/\s+/g, '_')}`;
+        const { error: iconErr } = await supabase.storage.from('cstore-icons').upload(iconFileName, draftIconFile, { upsert: true });
+        if (iconErr) {
+          await supabase.storage.from('cstore-apps').upload(iconFileName, draftIconFile, { upsert: true });
+        }
+        const { data: { publicUrl } } = supabase.storage.from('cstore-icons').getPublicUrl(iconFileName);
+        finalIconUrl = publicUrl;
+      }
+
+      const { error: updateErr } = await supabase
+        .from('apps')
+        .update({
+          name: draftForm.name.trim(),
+          description: draftForm.description.trim(),
+          icon_url: finalIconUrl,
+          is_draft: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedDraftApp.id);
+
+      if (updateErr) throw updateErr;
+
+      handleCloseDraftModal();
+      fetchData();
+    } catch (err) {
+      setDraftError(err.message || 'Failed to publish app');
+    } finally {
+      setDraftLoading(false);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -695,123 +776,205 @@ const UserDashboard = () => {
         </div>
       </div>
 
-      {/* ── 3. MY UPLOADED APPS ─────────────────────────────────────────── */}
-      <h3 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
-        <Package size={18} color="#a855f7" /> My Uploaded Apps ({myApps.length})
-      </h3>
+      {/* ── 2.5. CI/CD DRAFT BUILDS (NEEDS DETAILS) ────────────────────── */}
+      {(() => {
+        const draftApps = myApps.filter(app => app.is_draft || (!app.icon_url && app.upload_source === 'github'));
+        if (draftApps.length === 0) return null;
 
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem' }}>
-          {[1, 2, 3].map(n => (
-            <div key={n} className="glass skeleton-card" style={{ padding: '1.25rem 1.75rem', display: 'flex', alignItems: 'center', gap: '1.5rem', borderRadius: '16px', minHeight: '76px' }}>
-              <div className="skeleton-shimmer" style={{ width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0 }} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                <div className="skeleton-shimmer" style={{ height: '16px', width: '35%', borderRadius: '4px' }} />
-                <div className="skeleton-shimmer" style={{ height: '12px', width: '20%', borderRadius: '4px' }} />
-              </div>
-              <div className="skeleton-shimmer" style={{ width: '100px', height: '32px', borderRadius: '8px' }} />
+        return (
+          <div style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <h3 style={{ fontSize: '1.25rem', margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Sparkles size={18} color="#fbbf24" /> CI/CD Draft Builds ({draftApps.length})
+              </h3>
+              <span style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <AlertCircle size={11} /> Action Required: Add Icon & Description
+              </span>
             </div>
-          ))}
-        </div>
-      ) : myApps.length === 0 ? (
-        <div className="glass" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '18px', marginBottom: '2.5rem' }}>
-          <Package size={36} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>You haven't uploaded any applications yet.</p>
-          <button onClick={() => navigate('/upload')} className="btn-primary" style={{ padding: '9px 18px', fontSize: '0.85rem' }}>
-            <Upload size={15} style={{ marginRight: '6px' }} /> Upload Your First App
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem' }}>
-          {myApps.map((app) => (
-            <div key={app.id} className="glass card-loaded-fade" style={{ padding: '1.25rem 1.75rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', borderRadius: '16px' }}>
-              <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                {app.icon_url ? (
-                  <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : <LayoutGrid size={20} color="#6366f1" />}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {draftApps.map(app => (
+                <div
+                  key={app.id}
+                  className="glass card-loaded-fade"
+                  style={{
+                    padding: '1.25rem 1.75rem',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '1.5rem',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '240px', flex: 1 }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.12)', border: '1px dashed rgba(245, 158, 11, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fbbf24', flexShrink: 0 }}>
+                      <ImageIcon size={22} />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: 'white', fontSize: '1.1rem' }}>{app.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#a5b4fc', fontWeight: 600 }}>{app.version}</span>
+                        <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.3)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <GitBranch size={9} /> GitHub Actions
+                        </span>
+                      </div>
+                      <p style={{ margin: '0.25rem 0 0', fontSize: '0.83rem', color: 'var(--text-muted)' }}>
+                        APK uploaded safely ({app.size}). Missing App Icon & Description to go live on store.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenDraftModal(app)}
+                    className="btn-primary"
+                    style={{
+                      padding: '9px 18px',
+                      fontSize: '0.85rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)',
+                      flexShrink: 0
+                    }}
+                  >
+                    <Sparkles size={14} /> Complete Details & Go Live
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── 3. MY UPLOADED APPS ─────────────────────────────────────────── */}
+      {(() => {
+        const publishedApps = myApps.filter(app => !app.is_draft && !( !app.icon_url && app.upload_source === 'github' ));
+
+        return (
+          <>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
+              <Package size={18} color="#a855f7" /> My Uploaded Apps ({publishedApps.length})
+            </h3>
+
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem' }}>
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="glass skeleton-card" style={{ padding: '1.25rem 1.75rem', display: 'flex', alignItems: 'center', gap: '1.5rem', borderRadius: '16px', minHeight: '76px' }}>
+                    <div className="skeleton-shimmer" style={{ width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      <div className="skeleton-shimmer" style={{ height: '16px', width: '35%', borderRadius: '4px' }} />
+                      <div className="skeleton-shimmer" style={{ height: '12px', width: '20%', borderRadius: '4px' }} />
+                    </div>
+                    <div className="skeleton-shimmer" style={{ width: '100px', height: '32px', borderRadius: '8px' }} />
+                  </div>
+                ))}
               </div>
-              <div style={{ flex: 1, minWidth: '150px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 600, color: 'white' }}>{app.name}</span>
-                  {app.updated_by_admin && (
-                    <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.35)' }}>
-                      ⚡ Admin by Update
-                    </span>
-                  )}
-                  {/* Source Badge: GitHub CI/CD vs Manual */}
-                  {isGitHubSource(app) ? (
-                    <span 
+            ) : publishedApps.length === 0 ? (
+              <div className="glass" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '18px', marginBottom: '2.5rem' }}>
+                <Package size={36} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>You haven't uploaded any applications yet.</p>
+                <button onClick={() => navigate('/upload')} className="btn-primary" style={{ padding: '9px 18px', fontSize: '0.85rem' }}>
+                  <Upload size={15} style={{ marginRight: '6px' }} /> Upload Your First App
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2.5rem' }}>
+                {publishedApps.map((app) => (
+                  <div key={app.id} className="glass card-loaded-fade" style={{ padding: '1.25rem 1.75rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', borderRadius: '16px' }}>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                      {app.icon_url ? (
+                        <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : <LayoutGrid size={20} color="#6366f1" />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: '150px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, color: 'white' }}>{app.name}</span>
+                        {app.updated_by_admin && (
+                          <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+                            ⚡ Admin by Update
+                          </span>
+                        )}
+                        {/* Source Badge: GitHub CI/CD vs Manual */}
+                        {isGitHubSource(app) ? (
+                          <span 
+                            style={{ 
+                              fontSize: '0.68rem', 
+                              padding: '2px 8px', 
+                              borderRadius: '6px', 
+                              background: 'rgba(99, 102, 241, 0.15)', 
+                              color: '#a5b4fc', 
+                              border: '1px solid rgba(99, 102, 241, 0.3)', 
+                              fontWeight: 700, 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '0.3rem' 
+                            }}
+                            title="Deployed automatically via GitHub Actions CI/CD"
+                          >
+                            <GitBranch size={11} /> GitHub CI/CD
+                          </span>
+                        ) : (
+                          <span 
+                            style={{ 
+                              fontSize: '0.68rem', 
+                              padding: '2px 8px', 
+                              borderRadius: '6px', 
+                              background: 'rgba(56, 189, 248, 0.12)', 
+                              color: '#38bdf8', 
+                              border: '1px solid rgba(56, 189, 248, 0.25)', 
+                              fontWeight: 700, 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '0.3rem' 
+                            }}
+                            title="Uploaded manually through Web Dashboard"
+                          >
+                            <Upload size={11} /> Manual Upload
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {app.version} · {app.size}
+                        {app.last_updated_by && <span style={{ color: '#a5b4fc', marginLeft: '6px' }}>({app.last_updated_by})</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'center', padding: '0 1rem' }}>
+                      <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.15rem' }}>{app.download_count}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Downloads</div>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      {formatDate(app.created_at)}
+                    </div>
+                    <button 
+                      onClick={() => { setSelectedAppForUpdate(app); setIsUpdateModalOpen(true); }}
                       style={{ 
-                        fontSize: '0.68rem', 
-                        padding: '2px 8px', 
-                        borderRadius: '6px', 
-                        background: 'rgba(99, 102, 241, 0.15)', 
+                        background: 'rgba(99,102,241,0.1)', 
+                        border: '1px solid rgba(99,102,241,0.25)', 
                         color: '#a5b4fc', 
-                        border: '1px solid rgba(99, 102, 241, 0.3)', 
-                        fontWeight: 700, 
-                        display: 'inline-flex', 
+                        padding: '7px 14px', 
+                        borderRadius: '8px', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
                         alignItems: 'center', 
-                        gap: '0.3rem' 
+                        gap: '0.4rem', 
+                        fontFamily: 'inherit', 
+                        fontSize: '0.82rem',
+                        fontWeight: 600
                       }}
-                      title="Deployed automatically via GitHub Actions CI/CD"
                     >
-                      <GitBranch size={11} /> GitHub CI/CD
-                    </span>
-                  ) : (
-                    <span 
-                      style={{ 
-                        fontSize: '0.68rem', 
-                        padding: '2px 8px', 
-                        borderRadius: '6px', 
-                        background: 'rgba(56, 189, 248, 0.12)', 
-                        color: '#38bdf8', 
-                        border: '1px solid rgba(56, 189, 248, 0.25)', 
-                        fontWeight: 700, 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
-                        gap: '0.3rem' 
-                      }}
-                      title="Uploaded manually through Web Dashboard"
-                    >
-                      <Upload size={11} /> Manual Upload
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {app.version} · {app.size}
-                  {app.last_updated_by && <span style={{ color: '#a5b4fc', marginLeft: '6px' }}>({app.last_updated_by})</span>}
-                </div>
+                      <RefreshCw size={13} /> Update Build
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div style={{ textAlign: 'center', padding: '0 1rem' }}>
-                <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.15rem' }}>{app.download_count}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Downloads</div>
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                {formatDate(app.created_at)}
-              </div>
-              <button 
-                onClick={() => { setSelectedAppForUpdate(app); setIsUpdateModalOpen(true); }}
-                style={{ 
-                  background: 'rgba(99,102,241,0.1)', 
-                  border: '1px solid rgba(99,102,241,0.25)', 
-                  color: '#a5b4fc', 
-                  padding: '7px 14px', 
-                  borderRadius: '8px', 
-                  cursor: 'pointer', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.4rem', 
-                  fontFamily: 'inherit', 
-                  fontSize: '0.82rem',
-                  fontWeight: 600
-                }}
-              >
-                <RefreshCw size={13} /> Update Build
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </>
+        );
+      })()}
 
       {/* ── 4. DOWNLOAD HISTORY ─────────────────────────────────────────── */}
       <h3 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
@@ -1414,6 +1577,124 @@ const UserDashboard = () => {
                 </button>
               )}
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 4. Complete Draft Setup & Go Live Modal */}
+      {selectedDraftApp && createPortal(
+        <div
+          className={`modal-backdrop-out ${!isClosingDraft ? 'active' : ''}`}
+          onClick={handleCloseDraftModal}
+        >
+          <div
+            className={`modal-card-out ${!isClosingDraft ? 'active' : ''} glass`}
+            style={{
+              maxWidth: '520px',
+              width: '95%',
+              padding: '2rem',
+              borderRadius: '20px',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Sparkles size={20} color="#fbbf24" /> Complete Setup & Go Live
+                </h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Add an icon and description to publish your GitHub build to CStore.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseDraftModal}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handlePublishDraft} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>App Title</label>
+                <input
+                  type="text"
+                  required
+                  value={draftForm.name}
+                  onChange={e => setDraftForm({ ...draftForm, name: e.target.value })}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>App Icon (Required)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                    {draftIconPreview ? (
+                      <img src={draftIconPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <ImageIcon size={24} color="#94a3b8" />
+                    )}
+                  </div>
+                  <label style={{ flex: 1, padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px dashed var(--glass-border)', textAlign: 'center', cursor: 'pointer', fontSize: '0.82rem', color: '#a5b4fc' }}>
+                    <span>{draftIconFile ? draftIconFile.name : 'Choose App Icon (PNG, JPG)...'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const f = e.target.files[0];
+                        if (f) {
+                          setDraftIconFile(f);
+                          setDraftIconPreview(URL.createObjectURL(f));
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Detailed Description</label>
+                <textarea
+                  rows={4}
+                  required
+                  placeholder="Describe your app features, what's new in this build, etc."
+                  value={draftForm.description}
+                  onChange={e => setDraftForm({ ...draftForm, description: e.target.value })}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontFamily: 'inherit', resize: 'vertical' }}
+                />
+              </div>
+
+              {draftError && (
+                <div style={{ color: '#ef4444', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <AlertCircle size={14} /> {draftError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={handleCloseDraftModal}
+                  style={{ flex: 1, padding: '11px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-border)', borderRadius: '10px', color: '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={draftLoading}
+                  className="btn-primary"
+                  style={{ flex: 2, padding: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem' }}
+                >
+                  {draftLoading ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
+                  {draftLoading ? 'Publishing...' : 'Publish to Live Store'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

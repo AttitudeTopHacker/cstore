@@ -130,7 +130,7 @@ const Home = () => {
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
       if (error) throw error;
-      setApps(data || []);
+      setApps((data || []).filter(app => !app.is_draft && app.icon_url));
     } catch (err) {
       console.warn('Supabase apps load notice:', err.message);
       // Keep any already loaded apps or empty array

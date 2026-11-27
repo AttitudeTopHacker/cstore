@@ -128,16 +128,11 @@ async function runPublisher() {
 
   console.log(`[CStore CI/CD] Public Storage URL: ${finalFileUrl}`);
 
-  // Query existing app
-  const queryRes = await fetch(`${supabaseUrl}/rest/v1/apps?name=ilike.${encodeURIComponent(resolvedAppName)}&select=*`, {
-    headers: {
-      'Authorization': `Bearer ${supabaseKey}`,
-      'apikey': supabaseKey
-    }
-  });
-
-  const existingApps = await queryRes.json();
-  const existingApp = existingApps?.[0];
+  // Helper to normalize app names for 100% collision-free fuzzy matching
+  function normalizeName(str) {
+    return (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  const targetNorm = normalizeName(resolvedAppName);
 
   // Helper for safe DB requests that gracefully auto-strips columns not yet in Supabase schema
   async function safeDbRequest(url, method, payload) {
@@ -166,8 +161,19 @@ async function runPublisher() {
     return res;
   }
 
+  // 1. Check for existing app in database using Fuzzy Match
+  const queryRes = await fetch(`${supabaseUrl}/rest/v1/apps?select=*`, {
+    headers: {
+      'Authorization': `Bearer ${supabaseKey}`,
+      'apikey': supabaseKey
+    }
+  });
+
+  const allApps = await queryRes.json();
+  const existingApp = (Array.isArray(allApps) ? allApps : []).find(a => normalizeName(a.name) === targetNorm);
+
   if (existingApp) {
-    console.log(`[CStore CI/CD] Existing app found: ${existingApp.name} (id: ${existingApp.id}). Performing Version Update...`);
+    console.log(`[CStore CI/CD] Existing app matched: "${existingApp.name}" (id: ${existingApp.id}). Performing Version Update...`);
     
     // Save version history safely
     try {
@@ -188,7 +194,7 @@ async function runPublisher() {
       });
     } catch (_) {}
 
-    // Update app record
+    // Update app record (keeps existing icon and description, never creates duplicate)
     const updateBody = {
       version: appVersion,
       file_url: finalFileUrl,
@@ -196,6 +202,7 @@ async function runPublisher() {
       is_chunked: isChunked,
       chunk_count: totalChunks,
       upload_source: 'github',
+      is_draft: false,
       updated_at: new Date().toISOString()
     };
     if (!existingApp.user_id && targetUserId) {
@@ -218,21 +225,21 @@ async function runPublisher() {
           updated_at: new Date().toISOString()
         })
       });
-      console.log(`[CStore CI/CD] Upcoming update teaser for ${existingApp.name} marked as published!`);
+      console.log(`[CStore CI/CD] Upcoming update teaser for "${existingApp.name}" marked as published!`);
     } catch (_) {}
 
-    console.log(`[CStore CI/CD] SUCCESS: Updated ${existingApp.name} to ${appVersion}!`);
+    console.log(`[CStore CI/CD] SUCCESS: Updated "${existingApp.name}" to ${appVersion}!`);
   } else {
-    // Check if an upcoming release teaser exists
-    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/upcoming_releases?app_name=ilike.${encodeURIComponent(resolvedAppName)}&is_published=eq.false&select=*`, {
+    // 2. Check if an upcoming release teaser exists using Fuzzy Match
+    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/upcoming_releases?is_published=eq.false&select=*`, {
       headers: {
         'Authorization': `Bearer ${supabaseKey}`,
         'apikey': supabaseKey
       }
     });
 
-    const upcomingList = await upcomingRes.json();
-    const teaser = upcomingList?.[0];
+    const allUpcoming = await upcomingRes.json();
+    const teaser = (Array.isArray(allUpcoming) ? allUpcoming : []).find(t => normalizeName(t.app_name) === targetNorm);
 
     let appOwnerId = teaser?.created_by || targetUserId || null;
     let publisherName = teaser?.creator_name || 'CStore Developer';
@@ -254,11 +261,13 @@ async function runPublisher() {
       } catch (_) {}
     }
 
-    // Create new app record safely
+    const isDraft = !teaser && !iconUrl;
+
+    // Create app record: If teaser existed, publish live; if no teaser existed, publish as DRAFT
     const insertPayload = {
-      name: resolvedAppName,
+      name: teaser?.app_name || resolvedAppName,
       version: appVersion,
-      description: teaser?.description || description,
+      description: teaser?.description || description || 'Draft build uploaded via GitHub Actions. Please complete setup in your CStore Dashboard.',
       file_url: finalFileUrl,
       icon_url: iconUrl || teaser?.icon_url || null,
       size: sizeMB,
@@ -268,7 +277,8 @@ async function runPublisher() {
       user_id: appOwnerId,
       publisher_name: publisherName,
       publisher_email: publisherEmail,
-      upload_source: 'github'
+      upload_source: 'github',
+      is_draft: isDraft
     };
 
     const insertRes = await safeDbRequest(`${supabaseUrl}/rest/v1/apps`, 'POST', insertPayload);
@@ -289,9 +299,16 @@ async function runPublisher() {
           updated_at: new Date().toISOString()
         })
       });
-      console.log(`[CStore CI/CD] SUCCESS: Released ${resolvedAppName} from Coming Soon pipeline into live store!`);
+      console.log(`[CStore CI/CD] SUCCESS: Released "${teaser.app_name}" from Coming Soon pipeline into live store!`);
     } else {
-      console.log(`[CStore CI/CD] SUCCESS: Published brand new app ${resolvedAppName} to CStore!`);
+      console.log('==============================================================================');
+      console.log(`[CStore CI/CD] 📦 BUILD UPLOADED AS DRAFT: "${resolvedAppName}" (${appVersion})`);
+      console.log('------------------------------------------------------------------------------');
+      console.log('Status: Saved safely in Supabase Storage.');
+      console.log('Public Store: Hidden from Public Store until App Icon & Description are confirmed.');
+      console.log('👉 To publish live, visit your CStore Dashboard to add details:');
+      console.log('   http://localhost:5173/dashboard');
+      console.log('==============================================================================');
     }
   }
 
