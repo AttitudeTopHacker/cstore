@@ -31,6 +31,8 @@ const UserDashboard = () => {
     tab: 'file', // 'file' | 'github'
     file: null,
     githubRepo: '',
+    githubPat: localStorage.getItem('cstore_gh_pat') || '',
+    showPatInput: false,
     githubRelease: null,
     githubFetching: false,
     githubError: '',
@@ -39,7 +41,7 @@ const UserDashboard = () => {
     progress: 0
   });
 
-  const handleFetchGitHubRelease = async (repoInput) => {
+  const handleFetchGitHubRelease = async (repoInput, patInput) => {
     let cleanRepo = (repoInput || '').trim();
     cleanRepo = cleanRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
     if (!cleanRepo || !cleanRepo.includes('/')) {
@@ -49,9 +51,25 @@ const UserDashboard = () => {
 
     setPublishModal(prev => ({ ...prev, githubFetching: true, githubError: '', githubRelease: null }));
     try {
-      const res = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`);
+      const pat = (patInput !== undefined ? patInput : publishModal.githubPat || '').trim();
+      if (pat) {
+        localStorage.setItem('cstore_gh_pat', pat);
+      }
+
+      const headers = { 'Accept': 'application/vnd.github.v3+json' };
+      if (pat) {
+        headers['Authorization'] = `Bearer ${pat}`;
+      }
+
+      const res = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, { headers });
       if (!res.ok) {
-        throw new Error(`GitHub release not found (status ${res.status}). Ensure the repo is public and has a release.`);
+        if (res.status === 404) {
+          throw new Error(pat ? 'Release or repository not found. Verify repo name and token permissions.' : 'Repository not found or Private. Click "Private Repo?" below and enter your GitHub Token.');
+        }
+        if (res.status === 401) {
+          throw new Error('Invalid GitHub Personal Access Token (401 Unauthorized).');
+        }
+        throw new Error(`GitHub error (status ${res.status}).`);
       }
       const data = await res.json();
       const apkAsset = (data.assets || []).find(a => a.name.toLowerCase().endsWith('.apk'));
@@ -748,6 +766,8 @@ const UserDashboard = () => {
                     tab: 'file',
                     file: null,
                     githubRepo: item.github_repo_url || '',
+                    githubPat: localStorage.getItem('cstore_gh_pat') || '',
+                    showPatInput: false,
                     githubRelease: null,
                     githubFetching: false,
                     githubError: '',
@@ -1148,7 +1168,7 @@ const UserDashboard = () => {
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.82rem', color: '#a5b4fc', fontWeight: 600 }}>
                     Enter GitHub Repository (owner/repo)
                   </label>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem' }}>
                     <input
                       type="text"
                       placeholder="e.g. AttitudeTopHacker/cstore"
@@ -1159,12 +1179,37 @@ const UserDashboard = () => {
                     <button
                       type="button"
                       disabled={publishModal.githubFetching}
-                      onClick={() => handleFetchGitHubRelease(publishModal.githubRepo)}
+                      onClick={() => handleFetchGitHubRelease(publishModal.githubRepo, publishModal.githubPat)}
                       className="btn-primary"
                       style={{ padding: '9px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}
                     >
                       {publishModal.githubFetching ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />} Fetch Release
                     </button>
+                  </div>
+
+                  {/* Private Repo PAT Toggle */}
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPublishModal(prev => ({ ...prev, showPatInput: !prev.showPatInput }))}
+                      style={{ background: 'none', border: 'none', color: '#a5b4fc', fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'underline' }}
+                    >
+                      🔑 Private Repo? {publishModal.showPatInput ? 'Hide Token' : 'Add GitHub Personal Access Token'}
+                    </button>
+                    {publishModal.showPatInput && (
+                      <div style={{ marginTop: '0.35rem' }}>
+                        <input
+                          type="password"
+                          placeholder="GitHub Token (ghp_... with repo read permission)"
+                          value={publishModal.githubPat}
+                          onChange={(e) => setPublishModal(prev => ({ ...prev, githubPat: e.target.value }))}
+                          style={{ width: '100%', padding: '7px 11px', borderRadius: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.8rem' }}
+                        />
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
+                          Saved in your browser localStorage. Requires only read access to releases.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {publishModal.githubError && (
@@ -1250,7 +1295,7 @@ const UserDashboard = () => {
                 <button
                   type="button"
                   disabled={publishModal.loading}
-                  onClick={() => setPublishModal({ isOpen: false, item: null, tab: 'file', file: null, githubRepo: '', githubRelease: null, githubFetching: false, githubError: '', loading: false, error: '', progress: 0 })}
+                  onClick={() => setPublishModal(prev => ({ ...prev, isOpen: false, item: null, tab: 'file', file: null, githubRelease: null, githubFetching: false, githubError: '', loading: false, error: '', progress: 0 }))}
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'white', padding: '9px 18px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   Cancel
