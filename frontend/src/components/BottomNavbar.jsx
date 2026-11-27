@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutGrid, Upload, User, ShieldCheck } from 'lucide-react';
+import { Compass, LayoutGrid, Users, BookOpen, Upload, User, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const BottomNavbar = () => {
@@ -10,37 +10,52 @@ const BottomNavbar = () => {
     <div className="bottom-nav mobile-only">
       <NavLink 
         to="/" 
+        end
         className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
       >
-        <LayoutGrid size={24} />
-        <span>Store</span>
+        <Compass size={22} />
+        <span>Explore</span>
+      </NavLink>
+
+      <NavLink 
+        to="/apps" 
+        className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+      >
+        <LayoutGrid size={22} />
+        <span>Apps</span>
+      </NavLink>
+
+      <NavLink 
+        to="/developers" 
+        className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+      >
+        <Users size={22} />
+        <span>Teams</span>
       </NavLink>
 
       <NavLink 
         to={isLoggedIn ? "/upload" : "/login"} 
         className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
       >
-        <Upload size={24} />
+        <Upload size={22} />
         <span>Upload</span>
       </NavLink>
 
-      {isLoggedIn && (
+      {isLoggedIn ? (
         <NavLink 
           to="/dashboard" 
           className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
         >
-          <User size={24} />
+          <User size={22} />
           <span>Profile</span>
         </NavLink>
-      )}
-
-      {isAdmin && (
+      ) : (
         <NavLink 
-          to="/admin" 
+          to="/login" 
           className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
         >
-          <ShieldCheck size={24} />
-          <span>Admin</span>
+          <User size={22} />
+          <span>Sign In</span>
         </NavLink>
       )}
     </div>

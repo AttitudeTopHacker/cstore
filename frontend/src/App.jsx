@@ -2,8 +2,12 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import BottomNavbar from './components/BottomNavbar';
+import Footer from './components/Footer';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import Explore from './pages/Explore';
 import Home from './pages/Home';
+import Developers from './pages/Developers';
+import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import UserDashboard from './pages/UserDashboard';
@@ -11,15 +15,27 @@ import UploadApp from './pages/UploadApp';
 import './index.css';
 
 function App() {
-  console.log('CStore v1.1.4 Loaded - Pure Supabase');
+  console.log('CStore Loaded - Direct Supabase Architecture');
   return (
     <Router>
-      <div className="App">
+      <div className="App" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <Navbar />
-        <main className="container">
+        <main className="container" style={{ flex: '1 0 auto', width: '100%' }}>
           <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<Home />} />
+            {/* Concept 2 Explore Flagship Page */}
+            <Route path="/" element={<Explore />} />
+
+            {/* Full 8-App Catalog */}
+            <Route path="/apps" element={<Home />} />
+
+            {/* Developers / Team Showcase */}
+            <Route path="/developers" element={<Developers />} />
+            <Route path="/teams" element={<Developers />} />
+
+            {/* Documentation & GitHub CI/CD Guides */}
+            <Route path="/docs" element={<Docs />} />
+
+            {/* Auth */}
             <Route path="/login" element={<Login />} />
 
             {/* User Protected Route */}
@@ -43,9 +59,8 @@ function App() {
               </ProtectedRoute>
             } />
           </Routes>
-          {/* Bottom Spacer for Mobile */}
-          <div className="mobile-only" style={{ height: '140px' }} />
         </main>
+        <Footer />
         <BottomNavbar />
       </div>
     </Router>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, LayoutGrid, Search, Plus, PackageOpen, LogIn, Clock } from 'lucide-react';
+import { Download, LayoutGrid, Search, PackageOpen, LogIn, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import AppDetailsModal from '../components/AppDetailsModal';
@@ -33,6 +33,47 @@ const Home = () => {
   // App Details Modal State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedAppForDetails, setSelectedAppForDetails] = useState(null);
+
+  // Motion Typewriter State (Write & Remove) for Hero Headline
+  const heroPhrases = [
+    'Premium App Ecosystem',
+    'ORG: MSM.MOVIN'
+  ];
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [displayedText, setDisplayedText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentPhrase = heroPhrases[phraseIndex];
+    let timer;
+
+    if (!isDeleting) {
+      if (displayedText.length < currentPhrase.length) {
+        timer = setTimeout(() => {
+          setDisplayedText(currentPhrase.substring(0, displayedText.length + 1));
+        }, 75);
+      } else {
+        // Full phrase typed! Display for 3.5 seconds before removing
+        timer = setTimeout(() => {
+          setIsDeleting(true);
+        }, 3500);
+      }
+    } else {
+      if (displayedText.length > 0) {
+        timer = setTimeout(() => {
+          setDisplayedText(currentPhrase.substring(0, displayedText.length - 1));
+        }, 35);
+      } else {
+        // Fully erased! Pause briefly and switch to next phrase
+        timer = setTimeout(() => {
+          setIsDeleting(false);
+          setPhraseIndex((prev) => (prev + 1) % heroPhrases.length);
+        }, 250);
+      }
+    }
+
+    return () => clearTimeout(timer);
+  }, [displayedText, isDeleting, phraseIndex]);
 
   // On Android: scan Download/cstore folder on load to check existing APKs
   useEffect(() => {
@@ -77,16 +118,23 @@ const Home = () => {
   const fetchApps = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const queryPromise = supabase
         .from('apps')
         .select('*')
         .order('created_at', { ascending: false });
 
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase request timeout')), 6000)
+      );
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
       if (error) throw error;
       setApps(data || []);
     } catch (err) {
-      console.error('Supabase direct query failed:', err);
-      setApps([]);
+      console.warn('Supabase apps load notice:', err.message);
+      // Keep any already loaded apps or empty array
+      setApps(prev => (prev.length > 0 ? prev : []));
     } finally {
       setLoading(false);
     }
@@ -144,16 +192,8 @@ const Home = () => {
       if (isNative) {
         // Android: save path, show "Open App" button later
         setDownloadedApps(prev => ({ ...prev, [id]: path }));
-
-        // Auto-close modal and trigger install
-        setTimeout(() => setModal(prev => ({ ...prev, isOpen: false })), 1500);
-        setTimeout(async () => {
-          try { await DownloadManager.installApk(path); } catch (err) { console.error('Auto install failed:', err); }
-        }, 2000);
-      } else {
-        // Web (Desktop/Laptop): just close modal after download — no "Open App"
-        setTimeout(() => setModal(prev => ({ ...prev, isOpen: false })), 2000);
       }
+      // Kept open until user explicitly clicks "Done" or "X" button
 
     } catch (err) {
       console.error('Download failed:', err);
@@ -190,45 +230,41 @@ const Home = () => {
     (app.description && app.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  if (loading) {
-    return (
-      <div className="flex-center" style={{ height: '80vh', width: '100%', flexDirection: 'column', gap: '2rem', position: 'relative', zIndex: 100 }}>
-        <div style={{ width: '64px', height: '64px', border: '5px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite' }} />
-        <div className="flex-center" style={{ flexDirection: 'column', gap: '0.5rem' }}>
-          <h2 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 700 }}>Initializing CStore</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>Preparing your premium ecosystem...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="fade-in" style={{ paddingBottom: '120px' }}>
+    <div className="fade-in" style={{ paddingBottom: '20px' }}>
       {/* Hero Section */}
-      <section style={{ textAlign: 'center', padding: '6rem 0 4rem' }}>
-        <h1 style={{ 
-          fontSize: 'clamp(2.5rem, 8vw, 4.5rem)', 
-          lineHeight: 1.1, 
-          marginBottom: '1.5rem',
-          background: 'linear-gradient(135deg, #fff 0%, #94a3b8 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
-        }}>
-          Premium App Ecosystem
+      <section style={{ textAlign: 'center', padding: '2.5rem 0 2rem' }}>
+        <h1 className="hero-headline-wrapper">
+          <span className={phraseIndex === 0 ? "hero-title-main" : "hero-title-sub"}>
+            {displayedText}
+          </span>
+          <span 
+            style={{ 
+              display: 'inline-block',
+              width: '3.5px',
+              height: phraseIndex === 0 ? 'clamp(1.8rem, 4.5vw, 2.8rem)' : 'clamp(1.15rem, 2.8vw, 1.65rem)',
+              marginLeft: '6px',
+              background: 'linear-gradient(180deg, #818cf8 0%, #c084fc 100%)',
+              borderRadius: '2px',
+              boxShadow: '0 0 12px rgba(129, 140, 248, 0.9)',
+              animation: 'typewriterBlink 0.9s step-start infinite',
+              verticalAlign: 'middle',
+              transition: 'height 0.2s ease'
+            }} 
+          />
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.25rem', maxWidth: '700px', margin: '0 auto 3rem', lineHeight: 1.6 }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', maxWidth: '650px', margin: '0 auto 2rem', lineHeight: 1.6 }}>
           Discover and install high-performance Android applications with seamless updates and zero-latency downloads.
         </p>
         
-        <div className="glass" style={{ maxWidth: '600px', margin: '0 auto', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
-          <Search size={22} style={{ color: 'var(--primary)' }} />
+        <div className="glass" style={{ maxWidth: '600px', margin: '0 auto', padding: '0.85rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem', boxShadow: '0 16px 40px rgba(0,0,0,0.3)' }}>
+          <Search size={20} style={{ color: 'var(--primary)' }} />
           <input 
               type="text" 
               placeholder="Search apps, utilities, or games..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ background: 'none', border: 'none', outline: 'none', color: 'white', fontSize: '1.1rem', width: '100%', fontWeight: 500 }} 
+              style={{ background: 'none', border: 'none', outline: 'none', color: 'white', fontSize: '1.05rem', width: '100%', fontWeight: 500 }} 
           />
         </div>
       </section>
@@ -239,37 +275,42 @@ const Home = () => {
           <h2 style={{ fontSize: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
             <LayoutGrid size={24} style={{ color: 'var(--primary)' }} /> Trending Now
           </h2>
-          <button onClick={() => navigate(isLoggedIn ? '/upload' : '/login')} className="btn-primary desktop-only" style={{ padding: '10px 24px', fontSize: '0.95rem' }}>
-            {isLoggedIn ? <><Plus size={18} /> Upload New</> : <><LogIn size={18} /> Sign In</>}
-          </button>
         </div>
 
-        {/* Mobile Floating Action Button */}
-        <button 
-          className="mobile-only"
-          onClick={() => navigate(isLoggedIn ? '/upload' : '/login')}
-          style={{
-            position: 'fixed',
-            right: '20px',
-            bottom: '90px',
-            width: '60px',
-            height: '60px',
-            borderRadius: '30px',
-            background: 'var(--accent-gradient)',
-            color: 'white',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.5)',
-            zIndex: 900,
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-          }}
-        >
-          <Plus size={32} />
-        </button>
-
-        {apps.length === 0 ? (
+        {loading ? (
+          <div className="grid-apps">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <div 
+                key={n} 
+                className="glass skeleton-card" 
+                style={{ 
+                  padding: '2rem', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  minHeight: '290px',
+                  borderRadius: '24px'
+                }}
+              >
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '2rem' }}>
+                  <div className="skeleton-shimmer" style={{ width: '72px', height: '72px', borderRadius: '20px', flexShrink: 0 }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    <div className="skeleton-shimmer" style={{ height: '22px', width: '70%', borderRadius: '6px' }} />
+                    <div className="skeleton-shimmer" style={{ height: '14px', width: '40%', borderRadius: '4px' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '2rem', flex: 1 }}>
+                  <div className="skeleton-shimmer" style={{ height: '14px', width: '100%', borderRadius: '4px' }} />
+                  <div className="skeleton-shimmer" style={{ height: '14px', width: '90%', borderRadius: '4px' }} />
+                  <div className="skeleton-shimmer" style={{ height: '14px', width: '65%', borderRadius: '4px' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                  <div className="skeleton-shimmer" style={{ height: '18px', width: '55px', borderRadius: '4px' }} />
+                  <div className="skeleton-shimmer" style={{ height: '42px', width: '130px', borderRadius: '12px' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : apps.length === 0 ? (
           <div className="glass" style={{ padding: '6rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
             <PackageOpen size={64} style={{ color: 'var(--primary)', opacity: 0.4, marginBottom: '2rem' }} />
             <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Vault is Empty</h2>
@@ -279,7 +320,7 @@ const Home = () => {
         ) : (
           <div className="grid-apps">
             {filteredApps.map((app) => (
-              <div key={app.id} className="glass" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
+              <div key={app.id} className="glass card-loaded-fade" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '2rem' }}>
                   <div style={{ 
                     width: '72px', height: '72px', borderRadius: '20px', 
@@ -386,7 +427,12 @@ const Home = () => {
         {...modal}
         onCancel={() => setModal({ ...modal, status: 'cancelled' })}
         onRetry={() => handleDownload(apps.find(a => a.id === modal.id))}
-        onClose={() => setModal({ ...modal, isOpen: false })}
+        onClose={() => {
+          if (isNative && modal.status === 'success' && downloadedApps[modal.id]) {
+            try { DownloadManager.installApk(downloadedApps[modal.id]); } catch (e) {}
+          }
+          setModal(prev => ({ ...prev, isOpen: false }));
+        }}
       />
 
       {/* Version History Modal */}

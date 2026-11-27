@@ -4,7 +4,30 @@ import { Calendar, Download, AlertCircle, Loader2, X, Clock, FileText } from 'lu
 import { supabase } from '../supabaseClient';
 
 const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
-  if (!isOpen || !app) return null;
+  const [isClosing, setIsClosing] = useState(false);
+  const [rendered, setRendered] = useState(isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      setRendered(true);
+      setIsClosing(false);
+    } else if (!isClosing) {
+      setRendered(false);
+    }
+  }, [isOpen]);
+
+  const handleDismiss = (callback) => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      setRendered(false);
+      if (callback) callback();
+      else if (onClose) onClose();
+    }, 220);
+  };
+
+  if ((!rendered && !isOpen) || !app) return null;
 
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +83,8 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
     <>
       {/* Overlay */}
       <div
-        onClick={onClose}
+        onClick={() => handleDismiss(onClose)}
+        className={isClosing ? "modal-backdrop-out" : "modal-backdrop-in"}
         style={{
           position: 'fixed',
           top: 0,
@@ -80,6 +104,7 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
         {/* Card Container */}
         <div
           onClick={(e) => e.stopPropagation()}
+          className={isClosing ? "modal-card-out" : "modal-card-in"}
           style={{
             padding: '2.5rem',
             borderRadius: '24px',
@@ -96,7 +121,7 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
         >
           {/* Close button */}
           <button
-            onClick={onClose}
+            onClick={() => handleDismiss(onClose)}
             style={{
               position: 'absolute',
               top: '20px',
@@ -178,7 +203,7 @@ const VersionHistoryModal = ({ isOpen, onClose, app, onDownloadOld }) => {
                       </div>
                       
                       <button
-                        onClick={() => onDownloadOld(record)}
+                        onClick={() => handleDismiss(() => onDownloadOld(record))}
                         style={{
                           background: 'rgba(255,255,255,0.05)',
                           border: '1px solid var(--glass-border)',

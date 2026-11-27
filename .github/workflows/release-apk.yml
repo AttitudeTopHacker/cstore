@@ -45,6 +45,23 @@ jobs:
           cd frontend/android
           ./gradlew assembleRelease
 
+      - name: Auto-Publish to CStore (Chunked Upload)
+        if: env.CSTORE_DEPLOY_TOKEN != ''
+        run: |
+          APK_FILE=$(find frontend/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -f "$APK_FILE" ]; then
+            node frontend/scripts/cstore-publish.mjs \
+              --apk "$APK_FILE" \
+              --name "C STORE" \
+              --version "${{ github.ref_name }}" \
+              --supabaseUrl "https://cvbjoexzfwesgiapdcve.supabase.co" \
+              --token "${{ secrets.CSTORE_DEPLOY_TOKEN }}"
+          else
+            echo "No APK found to publish."
+          fi
+        env:
+          CSTORE_DEPLOY_TOKEN: ${{ secrets.CSTORE_DEPLOY_TOKEN }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
@@ -10,21 +10,41 @@ export const isAdminUser = (userOrEmail) => {
   const name = (typeof userOrEmail === 'object' ? (userOrEmail.name || '') : '').toLowerCase().trim();
   const role = (typeof userOrEmail === 'object' ? (userOrEmail.role || '') : '').toLowerCase().trim();
 
-  if (role === 'admin') return true;
+  // Exclude non-admin users explicitly
+  if (email === 'mohdsalman77776@gmail.com') return false;
 
   const adminList = [
-    'salman.movin@gmail.com',
-    'aattitudetophacker@gmail.com',
-    'attitudetophacker@gmail.com',
     'mohdsalman4151@gmail.com',
+    'salman.movin@gmail.com',
+    'attitudetophacker@gmail.com',
+    'aattitudetophacker@gmail.com',
     'cstore',
     'admin'
   ];
 
   if (adminList.includes(email) || adminList.includes(name)) return true;
-  if (email.includes('admin') || email.includes('cstore') || email.includes('salman')) return true;
+  if (role === 'admin' && (email.includes('admin') || email.includes('cstore') || email === 'mohdsalman4151@gmail.com')) return true;
 
   return false;
+};
+
+export const buildUserData = (supabaseUser) => {
+  if (!supabaseUser) return null;
+  const isUserAdmin = isAdminUser(supabaseUser.email);
+  const avatar = 
+    supabaseUser.user_metadata?.avatar_url ||
+    supabaseUser.user_metadata?.picture ||
+    supabaseUser.identities?.[0]?.identity_data?.avatar_url ||
+    supabaseUser.identities?.[0]?.identity_data?.picture ||
+    null;
+
+  return {
+    id: supabaseUser.id,
+    name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+    email: supabaseUser.email,
+    avatar_url: avatar,
+    role: isUserAdmin ? 'admin' : 'user'
+  };
 };
 
 const AuthContext = createContext(null);
@@ -35,248 +55,227 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isNewUser, setIsNewUser] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
+  const syncingRef = useRef(false);
 
-  // ─── Helper: sync supabase user directly ──────────────────────────────────
-  const syncUserWithSupabase = async (supabaseUser) => {
-    const isUserAdmin = isAdminUser(supabaseUser.email);
-    let userData = {
-      id: supabaseUser.id,
-      name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
-      email: supabaseUser.email,
-      role: isUserAdmin ? 'admin' : 'user'
-    };
+  // ─── Non-blocking background sync for user row ──────────────────────────────
+  // CRITICAL: Must NEVER be awaited directly inside onAuthStateChange to prevent
+  // Supabase client WebLock deadlock.
+  const syncUserDbBackground = (supabaseUser, currentRole = 'user') => {
+    if (!supabaseUser?.email || syncingRef.current) return;
+    syncingRef.current = true;
 
-    try {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', supabaseUser.email)
-        .maybeSingle();
+    setTimeout(async () => {
+      try {
+        const isUserAdmin = isAdminUser(supabaseUser.email) || currentRole === 'admin';
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id, role')
+          .eq('email', supabaseUser.email)
+          .maybeSingle();
 
-      if (existingUser) {
-        userData = {
-          ...existingUser,
-          role: isUserAdmin ? 'admin' : (existingUser.role || 'user')
-        };
-      } else {
-        await supabase.from('users').insert([{
-          id: supabaseUser.id,
-          name: userData.name,
-          email: userData.email,
-          role: userData.role,
-          status: 'active'
-        }]);
+        if (!existingUser) {
+          // Attempt insert (ignore password constraint error if any)
+          await supabase.from('users').insert([{
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
+            email: supabaseUser.email,
+            password: 'oauth_managed_login',
+            role: isUserAdmin ? 'admin' : 'user',
+            status: 'active'
+          }]);
+        }
+      } catch (e) {
+        console.warn('[Auth] Background DB sync warning:', e.message);
+      } finally {
+        syncingRef.current = false;
       }
-    } catch (e) {
-      console.warn('Direct Supabase user sync:', e.message);
-    }
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const sessionToken = session?.access_token || 'direct_supabase_session';
-    _setLogin(userData, sessionToken);
-    return { isNew: false, user: userData, token: sessionToken };
+    }, 150);
   };
 
   // ─── Internal login setter ──────────────────────────────────────────────────
   const _setLogin = (userData, tokenData) => {
-    // Save to localStorage first so it's available on re-mount
-    localStorage.setItem('cstore_token', tokenData);
-    localStorage.setItem('cstore_user', JSON.stringify(userData));
-    // Then update React state (both in same render batch)
+    try {
+      localStorage.setItem('cstore_token', tokenData || 'direct_supabase_session');
+      localStorage.setItem('cstore_user', JSON.stringify(userData));
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
     setUser(userData);
-    setToken(tokenData);
+    setToken(tokenData || 'direct_supabase_session');
   };
 
-  // ─── Init: load stored session + check supabase session ────────────────────
+  const _clearAuth = () => {
+    setUser(null);
+    setToken(null);
+    try {
+      localStorage.removeItem('cstore_token');
+      localStorage.removeItem('cstore_user');
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+  };
+
+  // ─── Init Auth ──────────────────────────────────────────────────────────────
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
-      // Fast load from localStorage
+      // 1. Instant hydration from localStorage
       const storedToken = localStorage.getItem('cstore_token');
-      const storedUser  = localStorage.getItem('cstore_user');
+      const storedUser = localStorage.getItem('cstore_user');
       if (storedToken && storedUser) {
         try {
-          const parsedUser = JSON.parse(storedUser);
-          setToken(storedToken);
-          setUser(parsedUser);
+          const parsed = JSON.parse(storedUser);
+          if (isMounted) {
+            setUser(parsed);
+            setToken(storedToken);
+          }
         } catch (e) {
           console.warn('Failed parsing stored user:', e);
         }
       }
 
-      // ── Web OAuth PKCE / Token Exchange ─────────────────────────────────────
-      if (!Capacitor.isNativePlatform()) {
+      // 2. Web PKCE exchange if ?code=... is in URL
+      if (!Capacitor.isNativePlatform() && window.location.search && window.location.search.includes('code=')) {
         try {
-          // 1. Check for ?code=... (Supabase v2 PKCE flow)
-          if (window.location.search) {
-            const searchParams = new URLSearchParams(window.location.search);
-            const code = searchParams.get('code');
-            if (code) {
-              console.log('[WebAuth] PKCE code found in URL, exchanging...');
-              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-              if (!error && data?.session?.user) {
-                await syncUserWithSupabase(data.session.user);
-                window.history.replaceState({}, document.title, window.location.pathname);
-                setLoading(false);
-                return;
+          const params = new URLSearchParams(window.location.search);
+          const code = params.get('code');
+          if (code) {
+            console.log('[WebAuth] Found code in URL, exchanging...');
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+            if (!error && data?.session?.user) {
+              const u = buildUserData(data.session.user);
+              if (isMounted) {
+                _setLogin(u, data.session.access_token);
               }
-            }
-          }
-
-          // 2. Check for #access_token=... (Implicit flow)
-          if (window.location.hash) {
-            const hash = window.location.hash.replace('#', '');
-            const hashParams = new URLSearchParams(hash);
-            const accessToken = hashParams.get('access_token');
-            const refreshToken = hashParams.get('refresh_token');
-            if (accessToken && refreshToken) {
-              console.log('[WebAuth] Implicit tokens found in hash, setting session...');
-              const { data, error } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken
-              });
-              if (!error && data?.session?.user) {
-                await syncUserWithSupabase(data.session.user);
-                window.history.replaceState({}, document.title, window.location.pathname);
-                setLoading(false);
-                return;
-              }
+              syncUserDbBackground(data.session.user, u.role);
+            } else if (error) {
+              console.warn('[WebAuth] PKCE exchange warning:', error.message);
             }
           }
         } catch (e) {
-          console.error('[WebAuth] URL OAuth exchange error:', e);
+          console.warn('[WebAuth] Error during code exchange:', e);
+        } finally {
+          // Always clean URL so code is not processed again
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (_) {}
         }
       }
 
-      // Check live Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await syncUserWithSupabase(session.user);
+      // 3. Fallback: check active Supabase session
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isMounted) {
+          const u = buildUserData(session.user);
+          _setLogin(u, session.access_token);
+          syncUserDbBackground(session.user, u.role);
+        }
+      } catch (e) {
+        console.warn('[Auth] getSession error:', e);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     };
 
     initAuth();
 
-    // ── Android deep-link handler ─────────────────────────────────────────────
-    // After Google auth, Chrome redirects to com.cstore.app://login?code=...
-    // KEY FIX: extract ONLY the 'code' param — not the full URL.
+    // ─── Capacitor Android Deep Link Handler ──────────────────────────────────
     const setupDeepLink = async () => {
       if (!Capacitor.isNativePlatform()) return;
 
       App.addListener('appUrlOpen', async (event) => {
         console.log('[DeepLink] received:', event.url);
-        
-        // KEY FIX: Close the in-app browser immediately when returning to the app
         try { await Browser.close(); } catch (e) { /* ignore */ }
 
         try {
           const parsedUrl = new URL(event.url);
-
-          // PKCE flow (Supabase v2 default): URL has ?code=XXXXXXXX
           const code = parsedUrl.searchParams.get('code');
-
-          // Implicit flow fallback: URL has #access_token=...&refresh_token=...
-          const hash = parsedUrl.hash.replace('#', '');
-          const hashParams   = new URLSearchParams(hash);
-          const accessToken  = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
 
           if (code) {
             console.log('[DeepLink] PKCE code found, exchanging...');
             const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-            if (error) {
-              console.error('[DeepLink] exchange failed:', error.message);
-              // onAuthStateChange may still fire — do nothing extra
-            } else if (data?.session?.user) {
-              console.log('[DeepLink] PKCE success:', data.session.user.email);
-              await syncUserWithSupabase(data.session.user);
-            }
-          } else if (accessToken && refreshToken) {
-            console.log('[DeepLink] implicit tokens found, setting session...');
-            const { data, error } = await supabase.auth.setSession({
-              access_token:  accessToken,
-              refresh_token: refreshToken,
-            });
             if (!error && data?.session?.user) {
-              await syncUserWithSupabase(data.session.user);
+              const u = buildUserData(data.session.user);
+              _setLogin(u, data.session.access_token);
+              syncUserDbBackground(data.session.user, u.role);
             }
           } else {
-            // Supabase may have already handled it via detectSessionInUrl
-            console.log('[DeepLink] no code/token in URL, checking session...');
             const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) await syncUserWithSupabase(session.user);
+            if (session?.user) {
+              const u = buildUserData(session.user);
+              _setLogin(u, session.access_token);
+              syncUserDbBackground(session.user, u.role);
+            }
           }
         } catch (err) {
           console.error('[DeepLink] parse error:', err);
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) await syncUserWithSupabase(session.user);
         }
       });
     };
 
     setupDeepLink();
 
-    // ── Listen for auth state changes (covers all platforms) ─────────────────
+    // ─── Non-blocking Auth State Listener ──────────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[Auth] event:', event);
+      (event, session) => {
+        console.log('[Auth] event:', event, session?.user?.email);
+
         if (session?.user) {
-          await syncUserWithSupabase(session.user);
+          const u = buildUserData(session.user);
+          if (isMounted) {
+            _setLogin(u, session.access_token);
+            setLoading(false);
+          }
+          // Remove ?code= from URL if present
+          if (window.location.search && window.location.search.includes('code=')) {
+            try { window.history.replaceState({}, document.title, window.location.pathname); } catch (_) {}
+          }
+          // Safely defer DB sync outside this handler
+          syncUserDbBackground(session.user, u.role);
         } else if (event === 'SIGNED_OUT') {
-          // Do not wipe credentials if user was manually logged in as admin or persistent user
           const storedToken = localStorage.getItem('cstore_token');
           if (storedToken && (storedToken === 'cstore_admin_token' || storedToken.includes('admin'))) {
             return;
           }
-          _clearAuth();
+          if (isMounted) {
+            _clearAuth();
+            setLoading(false);
+          }
         }
       }
     );
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
       if (Capacitor.isNativePlatform()) App.removeAllListeners();
     };
   }, []);
 
-  // ─── Auth actions ───────────────────────────────────────────────────────────
-  const _clearAuth = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('cstore_token');
-    localStorage.removeItem('cstore_user');
-  };
-
+  // ─── Auth Actions ───────────────────────────────────────────────────────────
   const login = (userData, tokenData) => _setLogin(userData, tokenData);
 
   const logout = async () => {
     try {
-      // 1. Clear Supabase session FIRST (and wait for it)
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
-      // 2. Clear our custom local state
-      _clearAuth();
-      
-      // 3. Redirect to home
-      window.location.href = '/';
+      await supabase.auth.signOut();
     } catch (err) {
-      console.error('Logout error:', err.message);
-      // Fallback: clear local regardless
-      _clearAuth();
-      window.location.href = '/';
+      console.warn('Logout signOut warning:', err.message);
     }
+    _clearAuth();
+    window.location.href = '/';
   };
 
   const loginWithGoogle = async () => {
     const isNativeApp = Capacitor.isNativePlatform();
 
-    // Native Android/iOS → custom URL scheme so browser returns to app
-    // Web               → stay on same origin
+    // Native Android/iOS → custom URL scheme
+    // Web               → current origin root
     const redirectTo = isNativeApp
       ? 'com.cstore.app://login'
-      : `${window.location.origin}/login`;
+      : `${window.location.origin}/`;
 
     console.log('[Google] redirectTo:', redirectTo, '| native:', isNativeApp);
 
@@ -284,13 +283,12 @@ export const AuthProvider = ({ children }) => {
       provider: 'google',
       options: {
         redirectTo,
-        skipBrowserRedirect: isNativeApp, // Important for Capacitor: get URL instead of redirecting
+        skipBrowserRedirect: isNativeApp,
       },
     });
 
     if (error) throw error;
 
-    // For native apps, open the URL in the system browser / custom tab
     if (isNativeApp && data?.url) {
       await Browser.open({ url: data.url, windowName: '_self' });
     }
@@ -304,16 +302,12 @@ export const AuthProvider = ({ children }) => {
       email: profileData.email,
       role: isUserAdmin ? 'admin' : 'user'
     };
-    try {
-      await supabase.from('users').upsert([updatedUser]);
-    } catch (e) {
-      console.warn('Profile direct save:', e.message);
-    }
     _setLogin(updatedUser, 'direct_supabase_session');
+    syncUserDbBackground(updatedUser, updatedUser.role);
     return { user: updatedUser, token: 'direct_supabase_session' };
   };
 
-  const isAdmin    = user?.role === 'admin' || isAdminUser(user);
+  const isAdmin = user?.role === 'admin' || isAdminUser(user);
   const isLoggedIn = !!user;
 
   return (

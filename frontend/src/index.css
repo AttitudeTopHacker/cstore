@@ -124,7 +124,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 2rem;
-  padding-bottom: 5rem;
+  padding-bottom: 1.5rem;
 }
 
 .form-group input,
@@ -181,17 +181,17 @@ body {
 /* Responsive */
 /* Nav Styles */
 nav {
-  height: 80px;
+  height: 56px;
   display: flex;
   align-items: center;
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(2, 6, 23, 0.7);
+  background: rgba(2, 6, 23, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--glass-border);
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .App {
@@ -229,6 +229,15 @@ nav {
 @keyframes shine {
   to {
     background-position: 200% center;
+  }
+}
+
+@keyframes typewriterBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
   }
 }
 
@@ -340,8 +349,9 @@ button[style*="borderRadius: '50%'"]:hover {
   }
 
   nav {
-    height: 70px;
+    height: 52px;
     padding: 0 1rem;
+    margin-bottom: 1rem;
   }
 
   .App {
@@ -359,3 +369,126 @@ body {
   padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* Hero Section Headline & Transitions */
+.hero-headline-wrapper {
+  min-height: clamp(3.2rem, 7vw, 4.8rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.hero-headline-fade {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-title-main {
+  font-size: clamp(2.1rem, 5.5vw, 3.6rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  text-shadow: 0 0 24px rgba(165, 180, 252, 0.45), 0 0 45px rgba(192, 132, 252, 0.25);
+  display: inline;
+}
+
+.hero-title-sub {
+  font-size: clamp(1.25rem, 3.2vw, 1.95rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #38bdf8;
+  text-shadow: 0 0 18px rgba(56, 189, 248, 0.55), 0 0 35px rgba(129, 140, 248, 0.35);
+  display: inline;
+}
+
+/* ─── Shared Modal Spring Pop & Fade Transitions ───────── */
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes modalPop {
+  0%   { opacity: 0; transform: scale(0.85) translateY(24px); }
+  65%  { transform: scale(1.02) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes modalPopOut {
+  0%   { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.9) translateY(14px); }
+}
+
+.modal-backdrop-in {
+  animation: overlayFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.modal-backdrop-out {
+  animation: overlayFadeOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none !important;
+}
+
+.modal-card-in {
+  animation: modalPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.modal-card-out {
+  animation: modalPopOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none !important;
+}
+
+/* ─── Skeleton Loading Shimmer & Smooth Card Appear ─────────── */
+@keyframes skeletonShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.8s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+.skeleton-card {
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-loaded-fade {
+  animation: cardFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+

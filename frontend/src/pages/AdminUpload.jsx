@@ -165,7 +165,7 @@ const AdminUpload = () => {
       }
       
       setStatus({ loading: false, success: true, error: null });
-      setTimeout(() => navigate('/'), 2000);
+      // Modal stays visible until user clicks "Done" or "X" button
     } catch (err) {
       console.error('Upload process failed:', err);
       setStatus({ loading: false, success: false, error: err.message });
@@ -349,7 +349,10 @@ const AdminUpload = () => {
         {...modal}
         onCancel={() => setModal({ ...modal, status: 'cancelled' })}
         onRetry={handleSubmit}
-        onClose={() => setModal({ ...modal, isOpen: false })}
+        onClose={() => {
+          setModal({ ...modal, isOpen: false });
+          navigate('/admin');
+        }}
       />
     </div>
   );

@@ -46,7 +46,6 @@ const Login = () => {
     const isAdminAccount = (
       trimmedInput === 'cstore' ||
       trimmedInput === 'admin' ||
-      trimmedInput === 'salman' ||
       trimmedInput === 'aattitudetophacker@gmail.com' ||
       trimmedInput === 'attitudetophacker@gmail.com' ||
       trimmedInput === 'mohdsalman4151@gmail.com' ||

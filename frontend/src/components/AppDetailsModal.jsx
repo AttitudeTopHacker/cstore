@@ -1,15 +1,39 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, LayoutGrid } from 'lucide-react';
 
 const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
-  if (!isOpen || !app) return null;
+  const [isClosing, setIsClosing] = useState(false);
+  const [rendered, setRendered] = useState(isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      setRendered(true);
+      setIsClosing(false);
+    } else if (!isClosing) {
+      setRendered(false);
+    }
+  }, [isOpen]);
+
+  const handleDismiss = (callback) => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      setRendered(false);
+      if (callback) callback();
+      else if (onClose) onClose();
+    }, 220);
+  };
+
+  if (!rendered && !isOpen) return null;
 
   return createPortal(
     <>
       {/* Overlay */}
       <div
-        onClick={onClose}
+        onClick={() => handleDismiss(onClose)}
+        className={isClosing ? "modal-backdrop-out" : "modal-backdrop-in"}
         style={{
           position: 'fixed',
           top: 0,
@@ -29,6 +53,7 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
         {/* Modal Card */}
         <div
           onClick={(e) => e.stopPropagation()}
+          className={isClosing ? "modal-card-out" : "modal-card-in"}
           style={{
             padding: '2.5rem',
             borderRadius: '24px',
@@ -45,7 +70,7 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
         >
           {/* Close button */}
           <button
-            onClick={onClose}
+            onClick={() => handleDismiss(onClose)}
             style={{
               position: 'absolute',
               top: '20px',
@@ -112,7 +137,7 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
           {/* Footer Action */}
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
-              onClick={onClose}
+              onClick={() => handleDismiss(onClose)}
               style={{ 
                 flex: 1, 
                 padding: '12px 20px', 
@@ -129,10 +154,7 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
               Back to Store
             </button>
             <button
-              onClick={() => {
-                onDownload(app);
-                onClose();
-              }}
+              onClick={() => handleDismiss(() => onDownload(app))}
               style={{ 
                 flex: 1, 
                 padding: '12px 20px', 

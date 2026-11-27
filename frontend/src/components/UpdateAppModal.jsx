@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { useAuth, isAdminUser } from '../context/AuthContext';
 
 const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
   if (!isOpen || !app) return null;
+
+  const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
 
   const [formData, setFormData] = useState({
     name: app.name || '',
@@ -158,16 +162,21 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
         icon_url: finalIconUrl,
         size: formData.size,
         is_chunked: isChunked,
-        chunk_count: chunkCount
+        chunk_count: chunkCount,
+        ...(isAdmin ? {
+          updated_by_admin: true,
+          last_updated_by: `Admin (${user?.email || 'mohdsalman4151@gmail.com'})`
+        } : {
+          updated_by_admin: false,
+          last_updated_by: null
+        }),
+        updated_at: new Date().toISOString()
       }).eq('id', app.id);
 
       if (updateError) throw updateError;
 
       setUploadStatus('done');
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 1500);
+      // User dismisses modal using Done or X button
     } catch (err) {
       console.error(err);
       setError(err.message || 'An error occurred during update.');
@@ -253,10 +262,32 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
           {loading ? (
             <div style={{ padding: '3rem 0', textAlign: 'center' }}>
               {uploadStatus === 'done' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem' }}>
                   <CheckCircle size={56} color="#10b981" />
                   <h3 style={{ fontSize: '1.25rem', color: 'white' }}>Update Complete!</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Refreshing dashboard...</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Application build and metadata have been updated successfully.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSuccess();
+                      onClose();
+                    }}
+                    style={{
+                      padding: '10px 32px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)'
+                    }}
+                  >
+                    <CheckCircle size={16} /> Done
+                  </button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>

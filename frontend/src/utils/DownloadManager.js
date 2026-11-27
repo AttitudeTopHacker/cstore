@@ -8,12 +8,12 @@ export const DownloadManager = {
    * Helper to convert Google Drive links to direct download links
    */
   getDirectLink: (url) => {
-    if (url && url.includes('drive.google.com')) {
+    if (!url) return url;
+    if (url.includes('drive.google.com')) {
       const idMatch = url.match(/\/d\/([^/]+)/);
       if (idMatch) {
         return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
       }
-      // fallback for older format
       const idMatch2 = url.match(/[-\w]{25,}/);
       if (idMatch2) {
         return `https://drive.google.com/uc?export=download&id=${idMatch2[0]}`;
@@ -23,72 +23,108 @@ export const DownloadManager = {
   },
 
   /**
-   * WEB (Desktop/Laptop): Download using browser Fetch + Blob
+   * WEB (Desktop/Laptop): Direct seamless in-page download
+   * Never opens or closes blank tabs/windows! Fetches stream as Blob with real progress.
    */
   downloadFileWeb: async (url, fileName, onProgress) => {
     const directUrl = DownloadManager.getDirectLink(url);
+    if (onProgress) onProgress(15);
 
-    const response = await fetch(directUrl);
-    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+    try {
+      // 1. Fetch file as stream in the background without opening any page
+      const response = await fetch(directUrl);
+      if (!response.ok) throw new Error(`Download HTTP error: ${response.status}`);
 
-    const contentLength = response.headers.get('Content-Length');
-    const total = contentLength ? parseInt(contentLength, 10) : 0;
-    let loaded = 0;
+      const contentLength = +response.headers.get('Content-Length') || 0;
+      const reader = response.body.getReader();
+      let receivedLength = 0;
+      const chunks = [];
 
-    const reader = response.body.getReader();
-    const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        receivedLength += value.length;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      loaded += value.length;
-      if (total > 0) {
-        onProgress(Math.round((loaded / total) * 100));
+        if (contentLength > 0 && onProgress) {
+          const percent = Math.min(99, Math.round((receivedLength / contentLength) * 100));
+          onProgress(percent);
+        } else if (onProgress) {
+          onProgress((prev) => Math.min(95, (prev || 20) + 12));
+        }
       }
+
+      // 2. Create in-memory Blob and trigger direct disk save
+      const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = fileName;
+      // Do NOT set target='_blank'! Blob download directly saves to disk without tabs!
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      if (onProgress) onProgress(100);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+      return blobUrl;
+    } catch (err) {
+      console.warn('In-page fetch blob failed (CORS or network), using seamless direct anchor fallback:', err);
+      // Fallback: direct anchor without target="_blank"
+      const a = document.createElement('a');
+      a.href = directUrl;
+      a.download = fileName;
+      // Crucial: no target='_blank' to prevent opening/closing blank tabs!
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      if (onProgress) onProgress(100);
+      return directUrl;
     }
-
-    // Merge all chunks into a single Blob
-    const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
-    const blobUrl = URL.createObjectURL(blob);
-
-    // Trigger browser download
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    // Cleanup
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-    onProgress(100);
-    return blobUrl;
   },
 
   /**
-   * WEB (Desktop/Laptop): Download chunked file using browser Fetch + Blob
+   * WEB (Desktop/Laptop): Parallel chunked download using Promise.all
+   * Fetches chunks concurrently for maximum speed instead of slow serial loops!
    */
   downloadChunkedFileWeb: async (urlBase, chunkCount, fileName, onProgress) => {
-    const allChunks = [];
-
-    for (let i = 0; i < chunkCount; i++) {
-      const chunkUrl = `${urlBase}_part_${i}`;
-      const response = await fetch(chunkUrl);
-      if (!response.ok) throw new Error(`Chunk ${i} download failed: ${response.statusText}`);
-
-      const buffer = await response.arrayBuffer();
-      allChunks.push(new Uint8Array(buffer));
-
-      const progress = Math.round(((i + 1) / chunkCount) * 100);
-      onProgress(progress);
+    if (!chunkCount || chunkCount <= 1) {
+      // If only 1 chunk or base URL, download directly
+      return await DownloadManager.downloadFileWeb(`${urlBase}_part_0`, fileName, onProgress);
     }
 
-    // Merge all chunks into one Blob
+    const allChunks = new Array(chunkCount);
+    let completedChunks = 0;
+
+    if (onProgress) onProgress(10);
+
+    // Download chunks in parallel
+    const fetchChunk = async (i) => {
+      const chunkUrl = `${urlBase}_part_${i}`;
+      const response = await fetch(chunkUrl);
+      if (!response.ok) throw new Error(`Chunk ${i} failed: ${response.statusText}`);
+
+      const buffer = await response.arrayBuffer();
+      allChunks[i] = new Uint8Array(buffer);
+      completedChunks++;
+      if (onProgress) {
+        onProgress(Math.min(95, Math.round((completedChunks / chunkCount) * 100)));
+      }
+    };
+
+    const chunkPromises = [];
+    for (let i = 0; i < chunkCount; i++) {
+      chunkPromises.push(fetchChunk(i));
+    }
+    await Promise.all(chunkPromises);
+
+    // Merge all chunks into single Blob
     const blob = new Blob(allChunks, { type: 'application/vnd.android.package-archive' });
     const blobUrl = URL.createObjectURL(blob);
 
-    // Trigger browser download
+    // Trigger instant browser download
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = fileName;
@@ -96,6 +132,7 @@ export const DownloadManager = {
     a.click();
     document.body.removeChild(a);
 
+    if (onProgress) onProgress(100);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     return blobUrl;
   },
@@ -125,7 +162,7 @@ export const DownloadManager = {
 
       await Filesystem.removeAllListeners();
       await Filesystem.addListener('progress', (progress) => {
-        if (progress.bytes && progress.contentLength) {
+        if (progress.bytes && progress.contentLength && onProgress) {
           const percent = Math.round((progress.bytes / progress.contentLength) * 100);
           onProgress(percent);
         }
@@ -137,14 +174,12 @@ export const DownloadManager = {
         directory: Directory.ExternalStorage
       });
 
-      await new Promise(r => setTimeout(r, 1000));
-      
       const stat = await Filesystem.stat({
         path: fullPath,
         directory: Directory.ExternalStorage
       });
 
-      if (stat.size < 100000) {
+      if (stat.size < 1000) {
         throw new Error('DOWNLOAD_BLOCKED');
       }
       
@@ -180,8 +215,6 @@ export const DownloadManager = {
         const chunkUrl = `${urlBase}_part_${i}`;
         const tempChunkPath = `${tempFolder}/part_${i}.tmp`;
         
-        console.log(`Downloading chunk ${i + 1}/${chunkCount}...`);
-        
         await Filesystem.downloadFile({
           url: chunkUrl,
           path: tempChunkPath,
@@ -197,11 +230,11 @@ export const DownloadManager = {
           throw new Error(`Chunk ${i} is empty. Download failed.`);
         }
 
-        // Read as Base64 and append
+        // Read binary as base64 and append
         const chunkData = await Filesystem.readFile({
           path: tempChunkPath,
           directory: Directory.ExternalStorage,
-          encoding: null  // binary → returns base64
+          encoding: null
         });
 
         await Filesystem.appendFile({
@@ -215,8 +248,9 @@ export const DownloadManager = {
           directory: Directory.ExternalStorage
         });
 
-        onProgress(Math.round(((i + 1) / chunkCount) * 100));
-        await new Promise(r => setTimeout(r, 200));
+        if (onProgress) {
+          onProgress(Math.round(((i + 1) / chunkCount) * 100));
+        }
       }
 
       const stat = await Filesystem.stat({ path: finalPath, directory: Directory.ExternalStorage });

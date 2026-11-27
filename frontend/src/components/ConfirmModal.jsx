@@ -1,5 +1,6 @@
-import React from 'react';
-import { AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, Info, CheckCircle, X } from 'lucide-react';
 
 const ConfirmModal = ({
   isOpen,
@@ -11,7 +12,29 @@ const ConfirmModal = ({
   cancelText = 'Cancel',
   type = 'danger',
 }) => {
-  if (!isOpen) return null;
+  const [isClosing, setIsClosing] = useState(false);
+  const [rendered, setRendered] = useState(isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      setRendered(true);
+      setIsClosing(false);
+    } else if (!isClosing) {
+      setRendered(false);
+    }
+  }, [isOpen]);
+
+  const handleDismiss = (callback) => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      setRendered(false);
+      if (callback) callback();
+    }, 220);
+  };
+
+  if (!rendered && !isOpen) return null;
 
   const icons = {
     danger: <AlertTriangle size={32} color="#ff416c" />,
@@ -31,40 +54,76 @@ const ConfirmModal = ({
     success: 'rgba(34, 197, 94, 0.45)',
   };
 
-  return (
+  return createPortal(
     <>
-      {/* Overlay */}
+      {/* Overlay - Viewport Centered via Portal */}
       <div
-        onClick={onCancel}
+        onClick={() => handleDismiss(onCancel)}
+        className={isClosing ? "modal-backdrop-out" : "modal-backdrop-in"}
         style={{
           position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.65)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(2, 6, 23, 0.85)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 9999,
-          padding: '1rem',
-          animation: 'overlayFadeIn 0.25s ease-out',
+          zIndex: 99999,
+          padding: '1.5rem',
         }}
       >
         {/* Modal Card */}
         <div
           onClick={(e) => e.stopPropagation()}
+          className={isClosing ? "modal-card-out" : "modal-card-in"}
           style={{
-            background: 'rgba(15, 20, 40, 0.92)',
+            background: '#0b132b',
             border: '1px solid rgba(255, 255, 255, 0.12)',
             padding: '2.5rem 2rem',
             borderRadius: '24px',
-            maxWidth: '400px',
+            maxWidth: '420px',
             width: '100%',
             textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.05)',
-            animation: 'modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            position: 'relative',
+            boxShadow: '0 25px 70px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255,255,255,0.05)',
           }}
         >
+          {/* Top-Right Close Button */}
+          <button
+            onClick={() => handleDismiss(onCancel)}
+            title="Close"
+            style={{
+              position: 'absolute',
+              top: '16px',
+              right: '16px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '50%',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'white';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#94a3b8';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+            }}
+          >
+            <X size={16} />
+          </button>
+
           {/* Icon */}
           <div
             style={{
@@ -127,7 +186,7 @@ const ConfirmModal = ({
           >
             {/* Cancel Button */}
             <button
-              onClick={onCancel}
+              onClick={() => handleDismiss(onCancel)}
               style={{
                 flex: 1,
                 padding: '13px 20px',
@@ -157,7 +216,7 @@ const ConfirmModal = ({
 
             {/* Confirm Button */}
             <button
-              onClick={onConfirm}
+              onClick={() => handleDismiss(onConfirm)}
               style={{
                 flex: 1,
                 padding: '13px 20px',
@@ -200,7 +259,8 @@ const ConfirmModal = ({
           to   { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
-    </>
+    </>,
+    document.body
   );
 };
 

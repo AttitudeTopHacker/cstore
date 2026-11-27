@@ -7,7 +7,7 @@ import ProgressModal from '../components/ProgressModal';
 
 
 const UploadApp = () => {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const [formData, setFormData] = useState({ name: '', version: '', description: '', size: '' });
   const [files, setFiles] = useState({ icon: null, apk: null });
   const [status, setStatus] = useState({ loading: false, success: false, error: null });
@@ -139,6 +139,8 @@ const UploadApp = () => {
         is_chunked: isChunked || false,
         chunk_count: chunkCount || 1,
         user_id: user?.id || null,
+        publisher_name: user?.name || user?.email?.split('@')[0] || 'User',
+        publisher_email: user?.email || null,
         download_count: 0
       }]).select().single();
 
@@ -153,7 +155,7 @@ const UploadApp = () => {
       }
       
       setStatus({ loading: false, success: true, error: null });
-      setTimeout(() => navigate('/'), 2000);
+      // Modal stays visible until user clicks "Done" or "X" button
     } catch (err) {
       console.error('Upload process failed:', err);
       setStatus({ loading: false, success: false, error: err.message });
@@ -288,7 +290,10 @@ const UploadApp = () => {
         {...modal}
         onCancel={() => setModal({ ...modal, status: 'cancelled' })}
         onRetry={handleSubmit}
-        onClose={() => setModal({ ...modal, isOpen: false })}
+        onClose={() => {
+          setModal({ ...modal, isOpen: false });
+          navigate('/apps');
+        }}
       />
     </div>
   );

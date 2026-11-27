@@ -59,3 +59,9 @@ CREATE TABLE IF NOT EXISTS app_history (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   updated_by UUID REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- 7. Add upload_source to 'apps' table ('manual' or 'github')
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS upload_source TEXT DEFAULT 'manual';
+
+-- 8. Add build_source to 'upcoming_releases' table ('manual' or 'github')
+ALTER TABLE upcoming_releases ADD COLUMN IF NOT EXISTS build_source TEXT DEFAULT 'manual';
