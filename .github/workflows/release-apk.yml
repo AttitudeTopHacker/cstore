@@ -2,9 +2,16 @@ name: Build and Release APK
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.1.7)'
+        required: false
+        default: ''
 
 jobs:
   build-and-release:
@@ -25,6 +32,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Determine Release Version
+        id: version_step
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+            echo "RELEASE_VERSION=$VER" >> $GITHUB_OUTPUT
+            echo "IS_TAG=false" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VER="${{ github.ref_name }}"
+            echo "RELEASE_VERSION=$VER" >> $GITHUB_OUTPUT
+            echo "IS_TAG=true" >> $GITHUB_OUTPUT
+          else
+            GRADLE_VER=$(grep "versionName" frontend/android/app/build.gradle | head -n 1 | awk -F '"' '{print $2}')
+            if [ -n "$GRADLE_VER" ]; then
+              VER="v${GRADLE_VER}"
+            else
+              VER="v1.1.${{ github.run_number }}"
+            fi
+            echo "RELEASE_VERSION=$VER" >> $GITHUB_OUTPUT
+            echo "IS_TAG=false" >> $GITHUB_OUTPUT
+          fi
+          echo "Target Release Version: $VER"
 
       - name: Build Web Frontend
         run: |
@@ -52,7 +82,7 @@ jobs:
             node frontend/scripts/cstore-publish.mjs \
               --apk "$APK_FILE" \
               --name "C STORE" \
-              --version "${{ github.ref_name }}" \
+              --version "${{ steps.version_step.outputs.RELEASE_VERSION }}" \
               --supabaseUrl "https://cvbjoexzfwesgiapdcve.supabase.co" \
               --token "${{ secrets.CSTORE_DEPLOY_TOKEN }}"
           else
@@ -62,10 +92,11 @@ jobs:
           CSTORE_DEPLOY_TOKEN: ${{ secrets.CSTORE_DEPLOY_TOKEN }}
 
       - name: Create GitHub Release
+        if: steps.version_step.outputs.IS_TAG == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: frontend/android/app/build/outputs/apk/release/*.apk
-          name: CStore Release ${{ github.ref_name }}
+          name: CStore Release ${{ steps.version_step.outputs.RELEASE_VERSION }}
           draft: false
           prerelease: false
           generate_release_notes: true
