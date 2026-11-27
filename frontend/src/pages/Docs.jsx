@@ -46,19 +46,15 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleRelease
 
-      - name: Auto-Publish to CStore (Auto-links to Coming Soon Teaser)
-        run: |
-          curl -sSL https://raw.githubusercontent.com/AttitudeTopHacker/cstore/main/frontend/scripts/cstore-publish.mjs | node - \\
-            --apk "app/build/outputs/apk/release/app-release-unsigned.apk" \\
-            --name "MSM Cloud Backup" \\
-            --version "\${{ github.ref_name }}" \\
-            --supabaseUrl "https://cvbjoexzfwesgiapdcve.supabase.co" \\
-            --token "\${{ secrets.CSTORE_DEPLOY_TOKEN }}"
-        env:
-          CSTORE_DEPLOY_TOKEN: \${{ secrets.CSTORE_DEPLOY_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          name: Release \${{ github.ref_name }}
+          draft: false
 `;
 
-  const updateAppWorkflow = `name: CStore Push-to-Deploy (App Update)
+  const updateAppWorkflow = `name: Build & Release Android APK
 
 on:
   push:
@@ -67,7 +63,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-update:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
@@ -79,26 +75,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Build Android Release APK
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease
 
-      - name: Update Existing CStore App (Archives old version & uploads APK)
-        run: |
-          curl -sSL https://raw.githubusercontent.com/AttitudeTopHacker/cstore/main/frontend/scripts/cstore-publish.mjs | node - \\
-            --apk "app/build/outputs/apk/release/app-release-unsigned.apk" \\
-            --name "MSM Cloud Backup" \\
-            --version "\${{ github.ref_name }}" \\
-            --supabaseUrl "https://cvbjoexzfwesgiapdcve.supabase.co" \\
-            --token "\${{ secrets.CSTORE_DEPLOY_TOKEN }}"
-        env:
-          CSTORE_DEPLOY_TOKEN: \${{ secrets.CSTORE_DEPLOY_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          name: Release \${{ github.ref_name }}
+          draft: false
 `;
 
   return (
@@ -334,7 +321,7 @@ jobs:
               </button>
             </div>
             <div style={{ marginTop: '0.85rem', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              ⚡ <strong>What happens next:</strong> GitHub Actions triggers ➔ Gradle builds your APK ➔ <code>cstore-publish.mjs</code> matches your teaser by <code>--name</code> ➔ copies the teaser's icon, description, and developer credit ➔ uploads the chunked APK ➔ publishes the app live ➔ and marks the Coming Soon card as launched!
+              ⚡ <strong>What happens next:</strong> GitHub Actions triggers ➔ Gradle builds your APK ➔ creates your GitHub Release. Then on your <strong>CStore Dashboard</strong>, simply click <strong>"Link / Import APK & Go Live"</strong> on your card to chunk-upload the APK into Supabase Storage with real-time progress and launch to the store!
             </div>
           </div>
 

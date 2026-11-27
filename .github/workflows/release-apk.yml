@@ -75,24 +75,14 @@ jobs:
           cd frontend/android
           ./gradlew assembleRelease
 
-      - name: Auto-Publish to CStore (Chunked Upload)
-        run: |
-          APK_FILE=$(find frontend/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          if [ -f "$APK_FILE" ]; then
-            node frontend/scripts/cstore-publish.mjs \
-              --apk "$APK_FILE" \
-              --name "C STORE" \
-              --version "${{ steps.version_step.outputs.RELEASE_VERSION }}" \
-              --supabaseUrl "https://cvbjoexzfwesgiapdcve.supabase.co" \
-              --token "${{ secrets.CSTORE_DEPLOY_TOKEN }}"
-          else
-            echo "No APK found to publish."
-          fi
-        env:
-          CSTORE_DEPLOY_TOKEN: ${{ secrets.CSTORE_DEPLOY_TOKEN }}
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: frontend/android/app/build/outputs/apk/release/*.apk
 
       - name: Create GitHub Release
-        if: steps.version_step.outputs.IS_TAG == 'true'
+        if: steps.version_step.outputs.IS_TAG == 'true' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           files: frontend/android/app/build/outputs/apk/release/*.apk

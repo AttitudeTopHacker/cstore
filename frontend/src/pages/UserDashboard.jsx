@@ -28,11 +28,52 @@ const UserDashboard = () => {
   const [publishModal, setPublishModal] = useState({
     isOpen: false,
     item: null,
+    tab: 'file', // 'file' | 'github'
     file: null,
+    githubRepo: '',
+    githubRelease: null,
+    githubFetching: false,
+    githubError: '',
     loading: false,
     error: '',
     progress: 0
   });
+
+  const handleFetchGitHubRelease = async (repoInput) => {
+    let cleanRepo = (repoInput || '').trim();
+    cleanRepo = cleanRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+    if (!cleanRepo || !cleanRepo.includes('/')) {
+      setPublishModal(prev => ({ ...prev, githubError: 'Please enter valid repo: owner/repo (e.g. AttitudeTopHacker/cstore)' }));
+      return;
+    }
+
+    setPublishModal(prev => ({ ...prev, githubFetching: true, githubError: '', githubRelease: null }));
+    try {
+      const res = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`);
+      if (!res.ok) {
+        throw new Error(`GitHub release not found (status ${res.status}). Ensure the repo is public and has a release.`);
+      }
+      const data = await res.json();
+      const apkAsset = (data.assets || []).find(a => a.name.toLowerCase().endsWith('.apk'));
+      if (!apkAsset) {
+        throw new Error(`Release "${data.tag_name}" found, but no .apk asset was uploaded to it.`);
+      }
+
+      setPublishModal(prev => ({
+        ...prev,
+        githubFetching: false,
+        githubRelease: {
+          tagName: data.tag_name,
+          releaseName: data.name || data.tag_name,
+          apkName: apkAsset.name,
+          apkSize: (apkAsset.size / (1024 * 1024)).toFixed(1) + ' MB',
+          downloadUrl: apkAsset.browser_download_url
+        }
+      }));
+    } catch (err) {
+      setPublishModal(prev => ({ ...prev, githubFetching: false, githubError: err.message }));
+    }
+  };
 
   // Detailed Teaser Modal State
   const [selectedTeaserDetails, setSelectedTeaserDetails] = useState(null);
@@ -701,7 +742,19 @@ const UserDashboard = () => {
 
               {!item.is_published && (
                 <button
-                  onClick={() => setPublishModal({ isOpen: true, item, file: null, loading: false, error: '', progress: 0 })}
+                  onClick={() => setPublishModal({
+                    isOpen: true,
+                    item,
+                    tab: 'file',
+                    file: null,
+                    githubRepo: item.github_repo_url || '',
+                    githubRelease: null,
+                    githubFetching: false,
+                    githubError: '',
+                    loading: false,
+                    error: '',
+                    progress: 0
+                  })}
                   className="btn-primary"
                   style={{
                     width: '100%',
@@ -716,7 +769,7 @@ const UserDashboard = () => {
                     marginTop: '0.5rem'
                   }}
                 >
-                  <Upload size={14} /> Upload & Launch Live APK
+                  <Upload size={14} /> Link / Import APK & Go Live
                 </button>
               )}
             </div>
@@ -724,54 +777,69 @@ const UserDashboard = () => {
         </div>
       )}
 
-      {/* ── 2. GITHUB CI/CD AUTO-PUBLISH (PUSH TO DEPLOY) ────────────────── */}
-      <div className="glass" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2.5rem', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-          <GitBranch size={22} color="#6366f1" />
-          <h3 style={{ fontSize: '1.25rem', margin: 0, color: 'white' }}>GitHub Auto-Publish (CI/CD)</h3>
+      {/* ── 2. CARD-FIRST 2-STEP APP PUBLISHING WORKFLOW ────────────────── */}
+      <div className="glass" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2.5rem', border: '1px solid rgba(16, 185, 129, 0.3)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(15, 23, 42, 0.8) 100%)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Rocket size={22} color="#34d399" />
+            <h3 style={{ fontSize: '1.25rem', margin: 0, color: 'white' }}>Card-First Publishing Workflow</h3>
+          </div>
+          <span style={{ fontSize: '0.72rem', padding: '4px 12px', borderRadius: '20px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.35)', fontWeight: 800 }}>
+            Zero Duplicates • 100% Visual Control
+          </span>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.6 }}>
-          Push your Android code to GitHub and have your release APK chunked and published directly to CStore automatically!
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+          Publish and update your Android applications directly from your CStore dashboard in 2 clean steps:
         </p>
 
-        <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255,255,255,0.06)', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.8rem', color: '#a5b4fc', fontWeight: 600 }}>GitHub Action Secret Setup:</span>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`CSTORE_DEPLOY_TOKEN: ${user?.id || 'cstore_secret_token'}`);
-                setCopiedSecret(true);
-                setTimeout(() => setCopiedSecret(false), 2000);
-              }}
-              style={{ background: 'none', border: 'none', color: copiedSecret ? '#34d399' : '#a5b4fc', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-            >
-              {copiedSecret ? <><CheckCircle2 size={13} /> Copied</> : <><Copy size={13} /> Copy Secret</>}
-            </button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+          <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '14px', padding: '1.1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', color: '#fbbf24', fontWeight: 800, fontSize: '0.95rem' }}>
+              <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.2)', border: '1px solid rgba(245, 158, 11, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>1</span>
+              Step 1: Create Card
+            </div>
+            <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Click <strong>"+ Create Coming Soon Teaser"</strong> above. Set your App Name, Category, High-Res Icon, and detailed description.
+            </p>
           </div>
-          <code style={{ fontSize: '0.8rem', color: '#cbd5e1', wordBreak: 'break-all' }}>
-            Add <strong>CSTORE_DEPLOY_TOKEN</strong> = <span style={{ color: '#f59e0b' }}>{user?.id ? `cstore_usr_${user.id}` : 'Login to view secret'}</span> in your GitHub Repo ➔ Settings ➔ Secrets
-          </code>
+
+          <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '14px', padding: '1.1rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', color: '#34d399', fontWeight: 800, fontSize: '0.95rem' }}>
+              <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>2</span>
+              Step 2: Link APK & Go Live
+            </div>
+            <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Click <strong>"Link / Import APK & Go Live"</strong> on your card. Drag & drop your APK file or link from GitHub Releases — Supabase chunk uploads it with live progress!
+            </p>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            onClick={() => navigate('/docs')}
+            onClick={() => setIsTeaserModalOpen(true)}
+            className="btn-primary"
+            style={{ padding: '8px 18px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <Plus size={15} /> Create App Card Now
+          </button>
+          <button
+            onClick={() => navigate('/upload')}
             style={{
-              background: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
-              color: '#a5b4fc',
-              padding: '9px 18px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid var(--glass-border)',
+              color: 'white',
+              padding: '8px 16px',
               borderRadius: '10px',
               cursor: 'pointer',
               fontFamily: 'inherit',
-              fontSize: '0.88rem',
+              fontSize: '0.85rem',
               fontWeight: 600,
               display: 'inline-flex',
               alignItems: 'center',
               gap: '0.4rem'
             }}
           >
-            <Terminal size={15} /> View Full GitHub Actions YAML Guide <ArrowRight size={14} />
+            <Upload size={14} /> Direct Upload Page
           </button>
         </div>
       </div>
@@ -1012,18 +1080,135 @@ const UserDashboard = () => {
       {/* 1. Publish Upcoming Release Modal */}
       {publishModal.isOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="glass" style={{ maxWidth: '520px', width: '100%', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.4)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-              <Rocket size={24} color="#f59e0b" />
-              <h3 style={{ margin: 0, fontSize: '1.35rem', color: 'white' }}>Launch {publishModal.item?.app_name}</h3>
+          <div className="glass" style={{ maxWidth: '540px', width: '100%', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Rocket size={24} color="#f59e0b" />
+                <h3 style={{ margin: 0, fontSize: '1.35rem', color: 'white' }}>Launch {publishModal.item?.app_name}</h3>
+              </div>
+              <span style={{ fontSize: '0.78rem', padding: '3px 10px', borderRadius: '20px', background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.3)', fontWeight: 700 }}>
+                {publishModal.item?.version}
+              </span>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-              Ready to release <strong>{publishModal.item?.version}</strong>? Pick your Android APK file. It will be chunk-uploaded and automatically launched to the live store.
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+              Link your Android APK below. It will be chunk-uploaded to Supabase Storage and launched 100% live on CStore with real-time progress.
             </p>
 
+            {/* Tab Switcher: Option A vs Option B */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', background: 'rgba(0,0,0,0.35)', padding: '5px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <button
+                type="button"
+                onClick={() => setPublishModal(prev => ({ ...prev, tab: 'file' }))}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: publishModal.tab === 'file' ? 'var(--primary)' : 'transparent',
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Upload size={14} /> Option A: Local APK File
+              </button>
+              <button
+                type="button"
+                onClick={() => setPublishModal(prev => ({ ...prev, tab: 'github' }))}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: publishModal.tab === 'github' ? 'rgba(99, 102, 241, 0.4)' : 'transparent',
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.45rem',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <GitBranch size={14} /> Option B: GitHub Release
+              </button>
+            </div>
+
             <form onSubmit={handlePublishUpcoming} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {publishModal.tab === 'github' && (
+                <div style={{ background: 'rgba(99, 102, 241, 0.06)', borderRadius: '14px', padding: '1.1rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.82rem', color: '#a5b4fc', fontWeight: 600 }}>
+                    Enter GitHub Repository (owner/repo)
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. AttitudeTopHacker/cstore"
+                      value={publishModal.githubRepo}
+                      onChange={(e) => setPublishModal(prev => ({ ...prev, githubRepo: e.target.value }))}
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--glass-border)', color: 'white', fontSize: '0.88rem' }}
+                    />
+                    <button
+                      type="button"
+                      disabled={publishModal.githubFetching}
+                      onClick={() => handleFetchGitHubRelease(publishModal.githubRepo)}
+                      className="btn-primary"
+                      style={{ padding: '9px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}
+                    >
+                      {publishModal.githubFetching ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />} Fetch Release
+                    </button>
+                  </div>
+
+                  {publishModal.githubError && (
+                    <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.3rem' }}>{publishModal.githubError}</div>
+                  )}
+
+                  {publishModal.githubRelease && (
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '0.85rem', marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.88rem' }}>
+                          ✓ Found: {publishModal.githubRelease.tagName} ({publishModal.githubRelease.apkSize})
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                          File: {publishModal.githubRelease.apkName}
+                        </div>
+                      </div>
+                      <a
+                        href={publishModal.githubRelease.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          color: 'white',
+                          textDecoration: 'none',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Download size={12} /> Download APK
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Select Android APK File</label>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {publishModal.tab === 'github' ? 'Drop or Select the Release APK File to Upload' : 'Select Android APK File (.apk)'}
+                </label>
                 <div style={{ position: 'relative', border: '2px dashed var(--glass-border)', borderRadius: '14px', padding: '1.75rem', textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }}>
                   <input
                     type="file"
@@ -1048,11 +1233,11 @@ const UserDashboard = () => {
               {publishModal.loading && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                    <span>Chunk Uploading...</span>
-                    <span>{publishModal.progress}%</span>
+                    <span>Chunk Uploading to Supabase...</span>
+                    <span style={{ color: '#34d399', fontWeight: 700 }}>{publishModal.progress}%</span>
                   </div>
-                  <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${publishModal.progress}%`, background: 'var(--accent-gradient)' }} />
+                  <div style={{ height: '7px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${publishModal.progress}%`, background: 'var(--accent-gradient)', transition: 'width 0.2s ease' }} />
                   </div>
                 </div>
               )}
@@ -1065,7 +1250,7 @@ const UserDashboard = () => {
                 <button
                   type="button"
                   disabled={publishModal.loading}
-                  onClick={() => setPublishModal({ isOpen: false, item: null, file: null, loading: false, error: '', progress: 0 })}
+                  onClick={() => setPublishModal({ isOpen: false, item: null, tab: 'file', file: null, githubRepo: '', githubRelease: null, githubFetching: false, githubError: '', loading: false, error: '', progress: 0 })}
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'white', padding: '9px 18px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   Cancel
