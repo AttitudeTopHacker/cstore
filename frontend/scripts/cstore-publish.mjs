@@ -139,25 +139,54 @@ async function runPublisher() {
   const existingApps = await queryRes.json();
   const existingApp = existingApps?.[0];
 
-  if (existingApp) {
-    console.log(`[CStore CI/CD] Existing app found: ${existingApp.name} (id: ${existingApp.id}). Performing Version Update...`);
-    
-    // Save version history
-    await fetch(`${supabaseUrl}/rest/v1/app_versions`, {
-      method: 'POST',
+  // Helper for safe DB requests that gracefully auto-strips columns not yet in Supabase schema
+  async function safeDbRequest(url, method, payload) {
+    let res = await fetch(url, {
+      method,
       headers: {
         'Authorization': `Bearer ${supabaseKey}`,
         'apikey': supabaseKey,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
       },
-      body: JSON.stringify({
-        app_id: existingApp.id,
-        version: existingApp.version,
-        file_url: existingApp.file_url,
-        size: existingApp.size,
-        changelog: `Superseded by GitHub Actions CI/CD build ${appVersion}`
-      })
+      body: JSON.stringify(payload)
     });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      const match = errText.match(/Could not find the '([^']+)' column/);
+      if (match && match[1] && payload[match[1]] !== undefined) {
+        const missingCol = match[1];
+        console.log(`[CStore CI/CD] Column '${missingCol}' not found in Supabase schema, retrying without it...`);
+        delete payload[missingCol];
+        return safeDbRequest(url, method, payload);
+      }
+      throw new Error(errText);
+    }
+    return res;
+  }
+
+  if (existingApp) {
+    console.log(`[CStore CI/CD] Existing app found: ${existingApp.name} (id: ${existingApp.id}). Performing Version Update...`);
+    
+    // Save version history safely
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/app_history`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          app_id: existingApp.id,
+          version: existingApp.version,
+          file_url: existingApp.file_url,
+          size: existingApp.size,
+          description: `Superseded by GitHub Actions CI/CD build ${appVersion}`
+        })
+      });
+    } catch (_) {}
 
     // Update app record
     const updateBody = {
@@ -173,17 +202,7 @@ async function runPublisher() {
       updateBody.user_id = targetUserId;
     }
 
-    const patchRes = await fetch(`${supabaseUrl}/rest/v1/apps?id=eq.${existingApp.id}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(updateBody)
-    });
-
-    if (!patchRes.ok) throw new Error(await patchRes.text());
+    const patchRes = await safeDbRequest(`${supabaseUrl}/rest/v1/apps?id=eq.${existingApp.id}`, 'PATCH', updateBody);
 
     // Mark any active update teaser for this app as published
     try {
@@ -235,33 +254,24 @@ async function runPublisher() {
       } catch (_) {}
     }
 
-    // Create new app record
-    const insertRes = await fetch(`${supabaseUrl}/rest/v1/apps`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
-        name: resolvedAppName,
-        version: appVersion,
-        description: teaser?.description || description,
-        file_url: finalFileUrl,
-        icon_url: iconUrl || teaser?.icon_url || null,
-        size: sizeMB,
-        is_chunked: isChunked,
-        chunk_count: totalChunks,
-        download_count: 0,
-        user_id: appOwnerId,
-        publisher_name: publisherName,
-        publisher_email: publisherEmail,
-        upload_source: 'github'
-      })
-    });
+    // Create new app record safely
+    const insertPayload = {
+      name: resolvedAppName,
+      version: appVersion,
+      description: teaser?.description || description,
+      file_url: finalFileUrl,
+      icon_url: iconUrl || teaser?.icon_url || null,
+      size: sizeMB,
+      is_chunked: isChunked,
+      chunk_count: totalChunks,
+      download_count: 0,
+      user_id: appOwnerId,
+      publisher_name: publisherName,
+      publisher_email: publisherEmail,
+      upload_source: 'github'
+    };
 
-    if (!insertRes.ok) throw new Error(await insertRes.text());
+    const insertRes = await safeDbRequest(`${supabaseUrl}/rest/v1/apps`, 'POST', insertPayload);
     const insertedApp = (await insertRes.json())?.[0];
 
     // If teaser existed, mark as published
@@ -275,7 +285,7 @@ async function runPublisher() {
         },
         body: JSON.stringify({
           is_published: true,
-          published_app_id: insertedApp.id,
+          published_app_id: insertedApp?.id || null,
           updated_at: new Date().toISOString()
         })
       });
