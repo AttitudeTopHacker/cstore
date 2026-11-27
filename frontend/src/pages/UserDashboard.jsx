@@ -1949,6 +1949,7 @@ const UserDashboard = () => {
         app={selectedAppForUpdate}
         token={token}
         onSuccess={fetchData}
+        allowGitHub={true}
       />
     </div>
   );

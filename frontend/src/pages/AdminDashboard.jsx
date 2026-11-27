@@ -1543,13 +1543,14 @@ const AdminDashboard = () => {
         type={modalConfig.type}
       />
 
-      {/* Update App Modal */}
+      {/* Update App Modal (Admin Panel: local directory upload only) */}
       <UpdateAppModal
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
         app={selectedAppForUpdate}
         token={token}
         onSuccess={fetchAll}
+        allowGitHub={false}
       />
     </div>
   );

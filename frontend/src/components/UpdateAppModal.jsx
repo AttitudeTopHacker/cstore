@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
+import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X, GitBranch, Rocket, Download } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth, isAdminUser } from '../context/AuthContext';
 
-const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
+const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = false }) => {
   if (!isOpen || !app) return null;
 
   const { user } = useAuth();
@@ -23,6 +23,15 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState(''); // 'uploading_apk', 'uploading_icon', 'saving', 'done'
 
+  // GitHub Release Option State (for User Dashboard)
+  const [apkSource, setApkSource] = useState('local'); // 'local' | 'github'
+  const [githubRepo, setGithubRepo] = useState('');
+  const [githubPat, setGithubPat] = useState(localStorage.getItem('cstore_gh_pat') || '');
+  const [showPatInput, setShowPatInput] = useState(false);
+  const [githubFetching, setGithubFetching] = useState(false);
+  const [githubError, setGithubError] = useState('');
+  const [githubRelease, setGithubRelease] = useState(null);
+
   useEffect(() => {
     setFormData({
       name: app.name || '',
@@ -34,7 +43,68 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
     setError(null);
     setUploadProgress(0);
     setUploadStatus('');
+    setApkSource('local');
+    setGithubRepo(app.github_repo || app.github_repo_url || '');
+    setGithubRelease(null);
+    setGithubError('');
   }, [app]);
+
+  const handleFetchRelease = async (repoInput) => {
+    let cleanRepo = (repoInput || '').trim();
+    cleanRepo = cleanRepo.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+    if (!cleanRepo || !cleanRepo.includes('/')) {
+      setGithubError('Enter valid repository: owner/repo (e.g. AttitudeTopHacker/cstore)');
+      return;
+    }
+
+    setGithubFetching(true);
+    setGithubError('');
+    setGithubRelease(null);
+    try {
+      const headers = { 'Accept': 'application/vnd.github.v3+json' };
+      const pat = (githubPat || '').trim();
+      if (pat) {
+        localStorage.setItem('cstore_gh_pat', pat);
+        headers['Authorization'] = `Bearer ${pat}`;
+      }
+
+      const res = await fetch(`https://api.github.com/repos/${cleanRepo}/releases/latest`, { headers });
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error(pat ? 'Release or repository not found. Verify repo name and permissions.' : 'Repository not found or Private. Enter your GitHub Token below.');
+        }
+        if (res.status === 401) {
+          throw new Error('Invalid GitHub Personal Access Token (401 Unauthorized).');
+        }
+        throw new Error(`GitHub error (status ${res.status}).`);
+      }
+      const data = await res.json();
+      const apkAsset = (data.assets || []).find(a => a.name.toLowerCase().endsWith('.apk'));
+      if (!apkAsset) {
+        throw new Error(`Release "${data.tag_name}" found, but no .apk asset was uploaded to it.`);
+      }
+
+      setGithubRelease({
+        tagName: data.tag_name,
+        apkName: apkAsset.name,
+        apkSize: (apkAsset.size / (1024 * 1024)).toFixed(1) + ' MB',
+        downloadUrl: apkAsset.browser_download_url
+      });
+
+      // Suggest the release tag as version
+      if (data.tag_name) {
+        setFormData(prev => ({
+          ...prev,
+          version: data.tag_name,
+          size: `${(apkAsset.size / (1024 * 1024)).toFixed(1)} MB`
+        }));
+      }
+    } catch (err) {
+      setGithubError(err.message);
+    } finally {
+      setGithubFetching(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -163,6 +233,7 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
         size: formData.size,
         is_chunked: isChunked,
         chunk_count: chunkCount,
+        upload_source: apkSource === 'github' ? 'github' : (app.upload_source || 'manual'),
         ...(isAdmin ? {
           updated_by_admin: true,
           last_updated_by: `Admin (${user?.email || 'mohdsalman4151@gmail.com'})`
@@ -348,10 +419,150 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
                 />
               </div>
 
+              {/* If allowGitHub is enabled (User Dashboard), show Tab Selector */}
+              {allowGitHub && (
+                <div style={{ display: 'flex', gap: '0.4rem', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setApkSource('local')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: apkSource === 'local' ? 'var(--primary)' : 'transparent',
+                      color: 'white',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Upload size={13} /> Option A: Local Directory File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApkSource('github')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: apkSource === 'github' ? 'rgba(99, 102, 241, 0.4)' : 'transparent',
+                      color: 'white',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <GitBranch size={13} /> Option B: GitHub Release
+                  </button>
+                </div>
+              )}
+
+              {/* GitHub Release Fetcher Box (only if allowGitHub && apkSource === 'github') */}
+              {allowGitHub && apkSource === 'github' && (
+                <div style={{ background: 'rgba(99, 102, 241, 0.06)', borderRadius: '14px', padding: '1rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.82rem', color: '#a5b4fc', fontWeight: 600 }}>
+                    GitHub Repository (owner/repo)
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. AttitudeTopHacker/cstore"
+                      value={githubRepo}
+                      onChange={(e) => setGithubRepo(e.target.value)}
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--glass-border)', color: 'white', fontSize: '0.88rem' }}
+                    />
+                    <button
+                      type="button"
+                      disabled={githubFetching}
+                      onClick={() => handleFetchRelease(githubRepo)}
+                      className="btn-primary"
+                      style={{ padding: '9px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}
+                    >
+                      {githubFetching ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />} Fetch Release
+                    </button>
+                  </div>
+
+                  {/* Private Repo PAT toggle */}
+                  <div style={{ marginBottom: '0.4rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowPatInput(!showPatInput)}
+                      style={{ background: 'none', border: 'none', color: '#a5b4fc', fontSize: '0.76rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'underline' }}
+                    >
+                      🔑 Private Repo? {showPatInput ? 'Hide Token' : 'Add GitHub Access Token'}
+                    </button>
+                    {showPatInput && (
+                      <div style={{ marginTop: '0.35rem' }}>
+                        <input
+                          type="password"
+                          placeholder="GitHub Personal Access Token (ghp_...)"
+                          value={githubPat}
+                          onChange={(e) => setGithubPat(e.target.value)}
+                          style={{ width: '100%', padding: '7px 11px', borderRadius: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.8rem' }}
+                        />
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
+                          Saved in browser localStorage. Requires only repo/contents read access.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {githubError && (
+                    <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.3rem' }}>{githubError}</div>
+                  )}
+
+                  {githubRelease && (
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '0.85rem', marginTop: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.88rem' }}>
+                          ✓ Detected: {githubRelease.tagName} ({githubRelease.apkSize})
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                          File: {githubRelease.apkName}
+                        </div>
+                      </div>
+                      <a
+                        href={githubRelease.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.1)',
+                          color: 'white',
+                          textDecoration: 'none',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Download size={12} /> Download APK
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                 {/* APK Upload (Optional) */}
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>New APK File (Optional)</label>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    {allowGitHub && apkSource === 'github' ? 'Upload Release APK (.apk)' : 'New APK File (Optional)'}
+                  </label>
                   <div style={{ position: 'relative', width: '100%' }}>
                     <input
                       type="file"
@@ -363,7 +574,7 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px dashed var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.85rem', overflow: 'hidden' }}>
                       <File size={16} style={{ flexShrink: 0 }} />
                       <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {files.apk ? files.apk.name : 'Select newer .apk'}
+                        {files.apk ? files.apk.name : (allowGitHub && apkSource === 'github' ? 'Drop downloaded APK here' : 'Select newer .apk')}
                       </span>
                     </div>
                   </div>
