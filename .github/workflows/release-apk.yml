@@ -46,7 +46,6 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Auto-Publish to CStore (Chunked Upload)
-        if: env.CSTORE_DEPLOY_TOKEN != ''
         run: |
           APK_FILE=$(find frontend/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -f "$APK_FILE" ]; then

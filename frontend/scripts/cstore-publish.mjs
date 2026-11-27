@@ -24,8 +24,21 @@ const appVersion = getArg('--version') || process.env.APP_VERSION || 'v1.0.0';
 const description = getArg('--description') || process.env.APP_DESCRIPTION || 'Auto-published build via GitHub Actions CI/CD';
 const iconUrl = getArg('--icon') || process.env.ICON_URL || null;
 
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2YmpvZXh6Zndlc2dpYXBkY3ZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NjY2NzgsImV4cCI6MjA5MDM0MjY3OH0.SOhCZuFLN5iowxGyed3c3nN7qPaIRnQNth3UCSVt0-k';
+
 const supabaseUrl = (getArg('--supabaseUrl') || process.env.SUPABASE_URL || 'https://cvbjoexzfwesgiapdcve.supabase.co').replace(/\/$/, '');
-const supabaseKey = getArg('--token') || getArg('--supabaseKey') || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.CSTORE_DEPLOY_TOKEN || process.env.SUPABASE_KEY;
+const rawToken = getArg('--token') || process.env.CSTORE_DEPLOY_TOKEN || getArg('--supabaseKey') || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '';
+
+let targetUserId = null;
+let supabaseKey = DEFAULT_SUPABASE_ANON_KEY;
+
+if (rawToken.startsWith('cstore_usr_')) {
+  targetUserId = rawToken.replace('cstore_usr_', '').trim();
+} else if (rawToken.startsWith('eyJ')) {
+  supabaseKey = rawToken.trim();
+} else if (rawToken && rawToken.length >= 32 && rawToken.includes('-')) {
+  targetUserId = rawToken.trim();
+}
 
 if (!apkPath) {
   console.error('[CStore CI/CD] Error: Missing --apk path.');
@@ -34,11 +47,6 @@ if (!apkPath) {
 
 if (!fs.existsSync(apkPath)) {
   console.error(`[CStore CI/CD] Error: APK file not found at: ${apkPath}`);
-  process.exit(1);
-}
-
-if (!supabaseKey) {
-  console.error('[CStore CI/CD] Error: Missing --token or SUPABASE_SERVICE_ROLE_KEY.');
   process.exit(1);
 }
 
@@ -152,6 +160,19 @@ async function runPublisher() {
     });
 
     // Update app record
+    const updateBody = {
+      version: appVersion,
+      file_url: finalFileUrl,
+      size: sizeMB,
+      is_chunked: isChunked,
+      chunk_count: totalChunks,
+      upload_source: 'github',
+      updated_at: new Date().toISOString()
+    };
+    if (!existingApp.user_id && targetUserId) {
+      updateBody.user_id = targetUserId;
+    }
+
     const patchRes = await fetch(`${supabaseUrl}/rest/v1/apps?id=eq.${existingApp.id}`, {
       method: 'PATCH',
       headers: {
@@ -159,15 +180,7 @@ async function runPublisher() {
         'apikey': supabaseKey,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        version: appVersion,
-        file_url: finalFileUrl,
-        size: sizeMB,
-        is_chunked: isChunked,
-        chunk_count: totalChunks,
-        upload_source: 'github',
-        updated_at: new Date().toISOString()
-      })
+      body: JSON.stringify(updateBody)
     });
 
     if (!patchRes.ok) throw new Error(await patchRes.text());
@@ -202,6 +215,26 @@ async function runPublisher() {
     const upcomingList = await upcomingRes.json();
     const teaser = upcomingList?.[0];
 
+    let appOwnerId = teaser?.created_by || targetUserId || null;
+    let publisherName = teaser?.creator_name || 'CStore Developer';
+    let publisherEmail = teaser?.creator_email || 'developer@cstore.local';
+
+    if (appOwnerId) {
+      try {
+        const uRes = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${appOwnerId}&select=*`, {
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey
+          }
+        });
+        const uList = await uRes.json();
+        if (uList && uList[0]) {
+          publisherName = uList[0].name || publisherName;
+          publisherEmail = uList[0].email || publisherEmail;
+        }
+      } catch (_) {}
+    }
+
     // Create new app record
     const insertRes = await fetch(`${supabaseUrl}/rest/v1/apps`, {
       method: 'POST',
@@ -221,9 +254,9 @@ async function runPublisher() {
         is_chunked: isChunked,
         chunk_count: totalChunks,
         download_count: 0,
-        user_id: teaser?.created_by || null,
-        publisher_name: teaser?.creator_name || 'Mohd Salman (Movin)',
-        publisher_email: teaser?.creator_email || 'mohdsalman4151@gmail.com',
+        user_id: appOwnerId,
+        publisher_name: publisherName,
+        publisher_email: publisherEmail,
         upload_source: 'github'
       })
     });
