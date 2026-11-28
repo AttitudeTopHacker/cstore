@@ -290,7 +290,16 @@ export const AuthProvider = ({ children }) => {
     if (error) throw error;
 
     if (isNativeApp && data?.url) {
-      await Browser.open({ url: data.url, windowName: '_self' });
+      try {
+        await Browser.open({ url: data.url, windowName: '_self' });
+      } catch (browserErr) {
+        console.warn('Browser.open failed on native platform, applying fallback:', browserErr);
+        try {
+          window.open(data.url, '_system');
+        } catch (_) {
+          window.location.href = data.url;
+        }
+      }
     }
   };
 

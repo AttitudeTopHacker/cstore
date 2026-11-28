@@ -206,7 +206,15 @@ const Home = () => {
           error: 'Google Drive is asking for a virus scan confirmation. Opening in browser so you can click "Download anyway".' 
         }));
         setTimeout(async () => {
-          await Browser.open({ url: DownloadManager.getDirectLink(file_url) });
+          try {
+            await Browser.open({ url: DownloadManager.getDirectLink(file_url) });
+          } catch (_) {
+            try {
+              window.open(DownloadManager.getDirectLink(file_url), '_system');
+            } catch (__) {
+              window.location.href = DownloadManager.getDirectLink(file_url);
+            }
+          }
           setModal(prev => ({ ...prev, isOpen: false }));
         }, 3000);
       } else {
