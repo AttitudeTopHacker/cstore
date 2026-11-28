@@ -511,7 +511,9 @@ button {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: heroShimmerTopToBottom 2.8s linear infinite;
-  filter: drop-shadow(0 0 24px rgba(165, 180, 252, 0.45)) drop-shadow(0 0 45px rgba(192, 132, 252, 0.25));
+  transform: translateZ(0);
+  will-change: background-position;
+  filter: drop-shadow(0 0 16px rgba(165, 180, 252, 0.35));
 }
 
 .hero-title-sub {
@@ -538,7 +540,9 @@ button {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: heroShimmerTopToBottom 2.4s linear infinite;
-  filter: drop-shadow(0 0 18px rgba(56, 189, 248, 0.55)) drop-shadow(0 0 35px rgba(129, 140, 248, 0.35));
+  transform: translateZ(0);
+  will-change: background-position;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.4));
 }
 
 /* ─── Shared Modal Spring Pop & Fade Transitions ───────── */

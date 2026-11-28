@@ -14,6 +14,69 @@ import { getAppCategory, cleanAppDescription, getCategoryBadgeStyle } from '../u
 
 const isNative = Capacitor.getPlatform() !== 'web';
 
+// Isolated Memoized Typewriter to prevent whole page re-renders on every character
+const HeroTypewriterHeadline = React.memo(() => {
+  const heroPhrases = [
+    'Premium App Ecosystem',
+    'ORG: MSM.MOVIN'
+  ];
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [displayedText, setDisplayedText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentPhrase = heroPhrases[phraseIndex];
+    let timer;
+
+    if (!isDeleting) {
+      if (displayedText.length < currentPhrase.length) {
+        timer = setTimeout(() => {
+          setDisplayedText(currentPhrase.substring(0, displayedText.length + 1));
+        }, 80);
+      } else {
+        timer = setTimeout(() => {
+          setIsDeleting(true);
+        }, 3500);
+      }
+    } else {
+      if (displayedText.length > 0) {
+        timer = setTimeout(() => {
+          setDisplayedText(currentPhrase.substring(0, displayedText.length - 1));
+        }, 40);
+      } else {
+        timer = setTimeout(() => {
+          setIsDeleting(false);
+          setPhraseIndex((prev) => (prev + 1) % heroPhrases.length);
+        }, 300);
+      }
+    }
+
+    return () => clearTimeout(timer);
+  }, [displayedText, isDeleting, phraseIndex]);
+
+  return (
+    <h1 className="hero-headline-wrapper">
+      <span className={phraseIndex === 0 ? "hero-title-main" : "hero-title-sub"}>
+        {displayedText}
+      </span>
+      <span 
+        style={{ 
+          display: 'inline-block',
+          width: '3.5px',
+          height: phraseIndex === 0 ? 'clamp(1.8rem, 4.5vw, 2.8rem)' : 'clamp(1.15rem, 2.8vw, 1.65rem)',
+          marginLeft: '6px',
+          background: 'linear-gradient(180deg, #818cf8 0%, #c084fc 100%)',
+          borderRadius: '2px',
+          boxShadow: '0 0 10px rgba(129, 140, 248, 0.8)',
+          animation: 'typewriterBlink 0.9s step-start infinite',
+          verticalAlign: 'middle',
+          transition: 'height 0.2s ease'
+        }} 
+      />
+    </h1>
+  );
+});
+
 const Home = () => {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,47 +97,6 @@ const Home = () => {
   // App Details Modal State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedAppForDetails, setSelectedAppForDetails] = useState(null);
-
-  // Motion Typewriter State (Write & Remove) for Hero Headline
-  const heroPhrases = [
-    'Premium App Ecosystem',
-    'ORG: MSM.MOVIN'
-  ];
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [displayedText, setDisplayedText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    const currentPhrase = heroPhrases[phraseIndex];
-    let timer;
-
-    if (!isDeleting) {
-      if (displayedText.length < currentPhrase.length) {
-        timer = setTimeout(() => {
-          setDisplayedText(currentPhrase.substring(0, displayedText.length + 1));
-        }, 75);
-      } else {
-        // Full phrase typed! Display for 3.5 seconds before removing
-        timer = setTimeout(() => {
-          setIsDeleting(true);
-        }, 3500);
-      }
-    } else {
-      if (displayedText.length > 0) {
-        timer = setTimeout(() => {
-          setDisplayedText(currentPhrase.substring(0, displayedText.length - 1));
-        }, 35);
-      } else {
-        // Fully erased! Pause briefly and switch to next phrase
-        timer = setTimeout(() => {
-          setIsDeleting(false);
-          setPhraseIndex((prev) => (prev + 1) % heroPhrases.length);
-        }, 250);
-      }
-    }
-
-    return () => clearTimeout(timer);
-  }, [displayedText, isDeleting, phraseIndex]);
 
   // On Android: scan Download/cstore folder on load to check existing APKs
   useEffect(() => {
@@ -251,25 +273,7 @@ const Home = () => {
     <div className="fade-in" style={{ paddingBottom: '20px' }}>
       {/* Hero Section */}
       <section style={{ textAlign: 'center', padding: 'clamp(1.25rem, 4vw, 2.5rem) 0 clamp(1rem, 3vw, 2rem)' }}>
-        <h1 className="hero-headline-wrapper">
-          <span className={phraseIndex === 0 ? "hero-title-main" : "hero-title-sub"}>
-            {displayedText}
-          </span>
-          <span 
-            style={{ 
-              display: 'inline-block',
-              width: '3.5px',
-              height: phraseIndex === 0 ? 'clamp(1.8rem, 4.5vw, 2.8rem)' : 'clamp(1.15rem, 2.8vw, 1.65rem)',
-              marginLeft: '6px',
-              background: 'linear-gradient(180deg, #818cf8 0%, #c084fc 100%)',
-              borderRadius: '2px',
-              boxShadow: '0 0 12px rgba(129, 140, 248, 0.9)',
-              animation: 'typewriterBlink 0.9s step-start infinite',
-              verticalAlign: 'middle',
-              transition: 'height 0.2s ease'
-            }} 
-          />
-        </h1>
+        <HeroTypewriterHeadline />
         <p style={{ color: 'var(--text-muted)', fontSize: 'clamp(0.88rem, 2.8vw, 1.05rem)', maxWidth: '650px', margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
           Discover and install high-performance Android applications with seamless updates and zero-latency downloads.
         </p>
