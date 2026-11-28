@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Download, Sparkles, Code2, Users, Rocket, Clock, ChevronLeft, ChevronRight, 
-  CheckCircle, ArrowRight, Bell, ShieldCheck, Upload, AlertCircle, FileText, 
+import {
+  Download, Sparkles, Code2, Users, Rocket, Clock, ChevronLeft, ChevronRight,
+  CheckCircle, ArrowRight, Bell, ShieldCheck, Upload, AlertCircle, FileText,
   ExternalLink, RefreshCw, Info, X
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -122,7 +122,7 @@ const Explore = () => {
           if (user?.id) {
             await supabase.from('downloads').insert([{ user_id: user.id, app_id: id }]);
           }
-        } catch (_) {}
+        } catch (_) { }
       })();
 
       // 2. High-speed download
@@ -149,13 +149,13 @@ const Explore = () => {
   const canManageRelease = (item) => {
     if (!isLoggedIn || !user) return false;
     const isCreator = (user.id && item.created_by && user.id === item.created_by) ||
-                      (user.email && item.creator_email && user.email.toLowerCase() === item.creator_email.toLowerCase());
+      (user.email && item.creator_email && user.email.toLowerCase() === item.creator_email.toLowerCase());
     return !!isCreator;
   };
 
   return (
     <div className="explore-page fade-in" style={{ paddingBottom: '30px' }}>
-      
+
       {/* ── 1. Hero Stream Deck (Concept 2 Banner) ─────────────────────────── */}
       <section style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
@@ -276,142 +276,142 @@ const Explore = () => {
               <div
                 key={app.id}
                 className="glass card-loaded-fade"
-              style={{
-                minWidth: '280px',
-                maxWidth: '300px',
-                flex: '0 0 auto',
-                padding: '1.1rem 1.25rem',
-                borderRadius: '18px',
-                scrollSnapAlign: 'start',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                border: index === 0 ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--glass-border)',
-                background: index === 0 ? 'linear-gradient(145deg, rgba(99, 102, 241, 0.08) 0%, rgba(15, 23, 42, 0.8) 100%)' : 'rgba(15, 23, 42, 0.6)',
-                transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-3px)';
-                e.currentTarget.style.boxShadow = '0 10px 25px rgba(99, 102, 241, 0.2)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              <div>
-                {/* Header: Icon + Name + Version Badge */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.65rem' }}>
-                  <div
-                    style={{
-                      width: '46px',
-                      height: '46px',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      background: 'rgba(99, 102, 241, 0.1)',
-                      border: '1px solid rgba(99, 102, 241, 0.2)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {app.icon_url ? (
-                      <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#a5b4fc' }}>
-                        {app.name.charAt(0)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {app.name}
-                      </h3>
-                      {(() => {
-                        const cat = getAppCategory(app);
-                        const style = getCategoryBadgeStyle(cat);
-                        return (
-                          <span style={{
-                            fontSize: '0.62rem',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            background: style.bg,
-                            border: `1px solid ${style.border}`,
-                            color: style.color,
-                            fontWeight: 700,
-                            flexShrink: 0
-                          }}>
-                            {cat}
-                          </span>
-                        );
-                      })()}
+                style={{
+                  minWidth: '280px',
+                  maxWidth: '300px',
+                  flex: '0 0 auto',
+                  padding: '1.1rem 1.25rem',
+                  borderRadius: '18px',
+                  scrollSnapAlign: 'start',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  border: index === 0 ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--glass-border)',
+                  background: index === 0 ? 'linear-gradient(145deg, rgba(99, 102, 241, 0.08) 0%, rgba(15, 23, 42, 0.8) 100%)' : 'rgba(15, 23, 42, 0.6)',
+                  transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-3px)';
+                  e.currentTarget.style.boxShadow = '0 10px 25px rgba(99, 102, 241, 0.2)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <div>
+                  {/* Header: Icon + Name + Version Badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.65rem' }}>
+                    <div
+                      style={{
+                        width: '46px',
+                        height: '46px',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {app.icon_url ? (
+                        <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#a5b4fc' }}>
+                          {app.name.charAt(0)}
+                        </span>
+                      )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
-                        {app.version || 'v1.0'}
-                      </span>
-                      <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        {app.size || 'APK'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.4, margin: '0 0 0.35rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {cleanAppDescription(app.description) || 'Verified fast Android package on CStore.'}
-                </p>
-
-                {/* Active Update Teaser Badge or Admin Update Badge on App Card */}
-                {app.updated_by_admin && (
-                  <div style={{ marginTop: '0.2rem', padding: '2px 8px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#fbbf24' }}>
-                      ⚡ Admin by Update
-                    </span>
-                  </div>
-                )}
-                {(() => {
-                  const upcomingUpdate = upcomingReleases.find(u => u.is_update && u.existing_app_id === app.id);
-                  if (upcomingUpdate) {
-                    return (
-                      <div style={{ marginTop: '0.2rem', padding: '2px 8px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#fbbf24' }}>
-                          ⚡ Update {upcomingUpdate.version} in Dev ({upcomingUpdate.progress}%)
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {app.name}
+                        </h3>
+                        {(() => {
+                          const cat = getAppCategory(app);
+                          const style = getCategoryBadgeStyle(cat);
+                          return (
+                            <span style={{
+                              fontSize: '0.62rem',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: style.bg,
+                              border: `1px solid ${style.border}`,
+                              color: style.color,
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              {cat}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
+                          {app.version || 'v1.0'}
+                        </span>
+                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+                        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                          {app.size || 'APK'}
                         </span>
                       </div>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
+                    </div>
+                  </div>
 
-              {/* Bottom Card Controls: Download Count + Get APK Button */}
-              <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
-                  <span style={{ color: '#818cf8', fontWeight: 700 }}>{app.download_count || 0}</span> dls
-                </span>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.4, margin: '0 0 0.35rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {cleanAppDescription(app.description) || 'Verified fast Android package on CStore.'}
+                  </p>
 
-                <button
-                  onClick={() => handleDownload(app)}
-                  className="btn-primary"
-                  style={{
-                    padding: '6px 14px',
-                    fontSize: '0.78rem',
-                    borderRadius: '7px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    fontWeight: 700,
-                  }}
-                >
-                  <Download size={13} /> Get APK
-                </button>
+                  {/* Active Update Teaser Badge or Admin Update Badge on App Card */}
+                  {app.updated_by_admin && (
+                    <div style={{ marginTop: '0.2rem', padding: '2px 8px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#fbbf24' }}>
+                        ⚡ Admin by Update
+                      </span>
+                    </div>
+                  )}
+                  {(() => {
+                    const upcomingUpdate = upcomingReleases.find(u => u.is_update && u.existing_app_id === app.id);
+                    if (upcomingUpdate) {
+                      return (
+                        <div style={{ marginTop: '0.2rem', padding: '2px 8px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#fbbf24' }}>
+                            ⚡ Update {upcomingUpdate.version} in Dev ({upcomingUpdate.progress}%)
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                {/* Bottom Card Controls: Download Count + Get APK Button */}
+                <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
+                    <span style={{ color: '#818cf8', fontWeight: 700 }}>{app.download_count || 0}</span> dls
+                  </span>
+
+                  <button
+                    onClick={() => handleDownload(app)}
+                    className="btn-primary"
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '0.78rem',
+                      borderRadius: '7px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Download size={13} /> Get APK
+                  </button>
+                </div>
               </div>
-            </div>
-          )))}
+            )))}
 
           {/* "View Full Catalog" Card at end of stream */}
           <Link
@@ -490,99 +490,99 @@ const Explore = () => {
               <div
                 key={member.id}
                 className="glass card-loaded-fade"
-              style={{
-                padding: '0.9rem 1.25rem',
-                borderRadius: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '1rem',
-                border: member.is_lead ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--glass-border)',
-                background: member.is_lead ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(15, 23, 42, 0.8) 100%)' : 'rgba(15, 23, 42, 0.5)',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', minWidth: 0 }}>
-                <img
-                  src={member.avatar_url || `https://github.com/${member.github_username}.png`}
-                  alt={member.name}
-                  referrerPolicy="no-referrer"
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: member.is_lead ? '2px solid #818cf8' : '2px solid rgba(255,255,255,0.1)',
-                    boxShadow: member.is_lead ? '0 0 12px rgba(129, 140, 248, 0.4)' : 'none',
-                    flexShrink: 0
-                  }}
-                />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'white', margin: 0 }}>
-                      {member.name}
-                    </h3>
-                    {member.is_lead && <ShieldCheck size={15} color="#818cf8" title="Lead Architect" />}
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginTop: '1px' }}>
-                    @{member.github_username}
-                  </span>
-                  <div style={{ marginTop: '0.2rem' }}>
-                    <span style={{ 
-                      fontSize: '0.62rem', 
-                      fontWeight: 700, 
-                      padding: '2px 6px', 
-                      borderRadius: '5px', 
-                      background: 'rgba(99, 102, 241, 0.18)', 
-                      color: '#a5b4fc', 
-                      textTransform: 'uppercase', 
-                      letterSpacing: '0.04em',
-                      whiteSpace: 'nowrap',
-                      display: 'inline-block'
-                    }}>
-                      {member.role || 'Contributor'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Arrow Button on Right */}
-              <a
-                href={member.github_url || `https://github.com/${member.github_username}`}
-                target="_blank"
-                rel="noreferrer"
-                title="View GitHub Profile"
                 style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: '0.9rem 1.25rem',
+                  borderRadius: '16px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#94a3b8',
-                  textDecoration: 'none',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  border: member.is_lead ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--glass-border)',
+                  background: member.is_lead ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(15, 23, 42, 0.8) 100%)' : 'rgba(15, 23, 42, 0.5)',
                   transition: 'all 0.2s ease',
-                  flexShrink: 0
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)';
-                  e.currentTarget.style.color = '#fff';
-                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
-                  e.currentTarget.style.transform = 'translateX(2px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                  e.currentTarget.style.color = '#94a3b8';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  e.currentTarget.style.transform = 'none';
                 }}
               >
-                <ChevronRight size={18} />
-              </a>
-            </div>
-          )))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', minWidth: 0 }}>
+                  <img
+                    src={member.avatar_url || `https://github.com/${member.github_username}.png`}
+                    alt={member.name}
+                    referrerPolicy="no-referrer"
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: member.is_lead ? '2px solid #818cf8' : '2px solid rgba(255,255,255,0.1)',
+                      boxShadow: member.is_lead ? '0 0 12px rgba(129, 140, 248, 0.4)' : 'none',
+                      flexShrink: 0
+                    }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                        {member.name}
+                      </h3>
+                      {member.is_lead && <ShieldCheck size={15} color="#818cf8" title="Lead Architect" />}
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginTop: '1px' }}>
+                      @{member.github_username}
+                    </span>
+                    <div style={{ marginTop: '0.2rem' }}>
+                      <span style={{
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '5px',
+                        background: 'rgba(99, 102, 241, 0.18)',
+                        color: '#a5b4fc',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block'
+                      }}>
+                        {member.role || 'Contributor'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Arrow Button on Right */}
+                <a
+                  href={member.github_url || `https://github.com/${member.github_username}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="View GitHub Profile"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94a3b8',
+                    textDecoration: 'none',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)';
+                    e.currentTarget.style.color = '#fff';
+                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                    e.currentTarget.style.transform = 'translateX(2px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.color = '#94a3b8';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    e.currentTarget.style.transform = 'none';
+                  }}
+                >
+                  <ChevronRight size={18} />
+                </a>
+              </div>
+            )))}
         </div>
       </section>
 
@@ -634,140 +634,140 @@ const Explore = () => {
                 <div
                   key={rel.id}
                   className="glass card-loaded-fade"
-                style={{
-                  position: 'relative',
-                  padding: '1rem 1.25rem 0.9rem',
-                  borderRadius: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.85rem',
-                  border: isUpdate ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(192, 132, 252, 0.25)',
-                  background: isUpdate 
-                    ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(15, 23, 42, 0.8) 100%)' 
-                    : 'linear-gradient(135deg, rgba(192, 132, 252, 0.06) 0%, rgba(15, 23, 42, 0.8) 100%)',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {/* 1. Top-Right Corner Status Text (1px top, tiny font, unbolded, green) */}
-                <div style={{ position: 'absolute', top: '1px', right: '8px', lineHeight: 1 }}>
-                  <span style={{
-                    fontSize: '0.50rem',
-                    fontWeight: 500,
-                    color: '#10b981',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    lineHeight: 1,
-                    userSelect: 'none'
-                  }}>
-                    {isUpdate ? 'Update Soon' : 'Coming Soon'}
-                  </span>
-                </div>
-
-                {/* 2. Left: Icon + Titles + Progress Bar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0, flex: 1, paddingRight: '0.4rem' }}>
-                  <div style={{ 
-                    width: '46px', 
-                    height: '46px', 
-                    borderRadius: '12px', 
-                    background: isUpdate ? 'rgba(245, 158, 11, 0.15)' : 'rgba(192, 132, 252, 0.15)', 
-                    border: isUpdate ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(192, 132, 252, 0.3)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    fontSize: '1.25rem',
-                    flexShrink: 0,
-                    overflow: 'hidden'
-                  }}>
-                    {rel.icon_url ? (
-                      <img src={rel.icon_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover' }} />
-                    ) : isUpdate ? '🔄' : '🚀'}
+                  style={{
+                    position: 'relative',
+                    padding: '1rem 1.25rem 0.9rem',
+                    borderRadius: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.85rem',
+                    border: isUpdate ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(192, 132, 252, 0.25)',
+                    background: isUpdate
+                      ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(15, 23, 42, 0.8) 100%)'
+                      : 'linear-gradient(135deg, rgba(192, 132, 252, 0.06) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {/* 1. Top-Right Corner Status Text (1px top, tiny font, unbolded, green) */}
+                  <div style={{ position: 'absolute', top: '1px', right: '8px', lineHeight: 1 }}>
+                    <span style={{
+                      fontSize: '0.50rem',
+                      fontWeight: 500,
+                      color: '#10b981',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      lineHeight: 1,
+                      userSelect: 'none'
+                    }}>
+                      {isUpdate ? 'Update Soon' : 'Coming Soon'}
+                    </span>
                   </div>
 
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'nowrap' }}>
-                      <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
-                        {rel.app_name}
-                      </h3>
-                      <span style={{ fontSize: '0.7rem', color: isUpdate ? '#fbbf24' : '#a855f7', fontWeight: 700, flexShrink: 0 }}>
-                        {isUpdate ? `Update ${rel.version}` : rel.version || 'v1.0'}
-                      </span>
-                      {(() => {
-                        const cat = getAppCategory(rel);
-                        const style = getCategoryBadgeStyle(cat);
-                        return (
-                          <span style={{
-                            fontSize: '0.62rem',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            background: style.bg,
-                            border: `1px solid ${style.border}`,
-                            color: style.color,
-                            fontWeight: 700,
-                            flexShrink: 0
-                          }}>
-                            {cat}
-                          </span>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Progress Bar & Milestone */}
-                    <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'nowrap' }}>
-                      <div style={{ width: '85px', height: '5px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
-                        <div
-                          style={{
-                            height: '100%',
-                            width: `${rel.progress || 50}%`,
-                            background: isUpdate ? 'linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)' : 'linear-gradient(90deg, #818cf8 0%, #c084fc 100%)',
-                            borderRadius: '6px',
-                          }}
-                        />
-                      </div>
-                      <span style={{ fontSize: '0.7rem', color: isUpdate ? '#fbbf24' : '#c084fc', fontWeight: 700, flexShrink: 0 }}>
-                        {rel.progress || 50}%
-                      </span>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        • {isUpdate ? 'Update Soon' : (rel.estimated_release || 'Coming Soon')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Right: More Details button (No Upload button on Explore!) */}
-                <div style={{ flexShrink: 0, marginTop: '12px' }}>
-                  <button
-                    onClick={() => setSelectedTeaserDetails(rel)}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.16)',
-                      color: '#e2e8f0',
-                      padding: '5px 12px',
-                      borderRadius: '8px',
-                      fontSize: '0.74rem',
-                      fontWeight: 700,
-                      display: 'inline-flex',
+                  {/* 2. Left: Icon + Titles + Progress Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0, flex: 1, paddingRight: '0.4rem' }}>
+                    <div style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '12px',
+                      background: isUpdate ? 'rgba(245, 158, 11, 0.15)' : 'rgba(192, 132, 252, 0.15)',
+                      border: isUpdate ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(192, 132, 252, 0.3)',
+                      display: 'flex',
                       alignItems: 'center',
-                      gap: '0.3rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      whiteSpace: 'nowrap'
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.14)';
-                      e.currentTarget.style.borderColor = 'rgba(192, 132, 252, 0.4)';
-                      e.currentTarget.style.color = '#fff';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)';
-                      e.currentTarget.style.color = '#e2e8f0';
-                    }}
-                    title="View Full Description & Details"
-                  >
-                    <Info size={13} /> More
-                  </button>
-                </div>
+                      justifyContent: 'center',
+                      fontSize: '1.25rem',
+                      flexShrink: 0,
+                      overflow: 'hidden'
+                    }}>
+                      {rel.icon_url ? (
+                        <img src={rel.icon_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover' }} />
+                      ) : isUpdate ? '🔄' : '🚀'}
+                    </div>
+
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'nowrap' }}>
+                        <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
+                          {rel.app_name}
+                        </h3>
+                        <span style={{ fontSize: '0.7rem', color: isUpdate ? '#fbbf24' : '#a855f7', fontWeight: 700, flexShrink: 0 }}>
+                          {isUpdate ? `Update ${rel.version}` : rel.version || 'v1.0'}
+                        </span>
+                        {(() => {
+                          const cat = getAppCategory(rel);
+                          const style = getCategoryBadgeStyle(cat);
+                          return (
+                            <span style={{
+                              fontSize: '0.62rem',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: style.bg,
+                              border: `1px solid ${style.border}`,
+                              color: style.color,
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              {cat}
+                            </span>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Progress Bar & Milestone */}
+                      <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'nowrap' }}>
+                        <div style={{ width: '85px', height: '5px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
+                          <div
+                            style={{
+                              height: '100%',
+                              width: `${rel.progress || 50}%`,
+                              background: isUpdate ? 'linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)' : 'linear-gradient(90deg, #818cf8 0%, #c084fc 100%)',
+                              borderRadius: '6px',
+                            }}
+                          />
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: isUpdate ? '#fbbf24' : '#c084fc', fontWeight: 700, flexShrink: 0 }}>
+                          {rel.progress || 50}%
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          • {isUpdate ? 'Update Soon' : (rel.estimated_release || 'Coming Soon')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                {/* 3. Right: Arrow Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTeaserDetails(rel)}
+                  title="View Details"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)';
+                    e.currentTarget.style.color = '#fff';
+                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                    e.currentTarget.style.transform = 'translateX(2px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.color = '#94a3b8';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    e.currentTarget.style.transform = 'none';
+                  }}
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
             );
           }))}
@@ -778,34 +778,34 @@ const Explore = () => {
       {selectedTeaserDetails && (() => {
         const isModalUpdate = isAppUpdate(selectedTeaserDetails);
         return createPortal(
-          <div 
+          <div
             className={isClosingTeaser ? 'modal-backdrop-out' : 'modal-backdrop-in'}
-            style={{ 
-              position: 'fixed', 
+            style={{
+              position: 'fixed',
               top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(2, 6, 23, 0.85)', 
-              backdropFilter: 'blur(20px)', 
+              background: 'rgba(2, 6, 23, 0.85)',
+              backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              zIndex: 99999, 
-              padding: '1.25rem' 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 99999,
+              padding: '1.25rem'
             }}
             onClick={handleCloseTeaser}
           >
-            <div 
+            <div
               className={isClosingTeaser ? 'modal-card-out' : 'modal-card-in'}
-              style={{ 
-                width: '100%', 
-                maxWidth: '540px', 
+              style={{
+                width: '100%',
+                maxWidth: '540px',
                 maxHeight: '85vh',
                 overflowY: 'auto',
-                padding: '2rem', 
-                borderRadius: '24px', 
+                padding: '2rem',
+                borderRadius: '24px',
                 border: '1px solid rgba(192, 132, 252, 0.35)',
                 background: '#0b132b',
                 boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(168, 85, 247, 0.25)',
@@ -839,11 +839,11 @@ const Explore = () => {
                       <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'white', margin: 0 }}>
                         {selectedTeaserDetails.app_name}
                       </h3>
-                      <span style={{ 
-                        fontSize: '0.72rem', 
-                        fontWeight: 800, 
-                        padding: '3px 8px', 
-                        borderRadius: '6px', 
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
                         background: isModalUpdate ? 'rgba(245, 158, 11, 0.2)' : 'rgba(192, 132, 252, 0.2)',
                         color: isModalUpdate ? '#fde68a' : '#e9d5ff',
                         border: isModalUpdate ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(192, 132, 252, 0.35)',
@@ -960,13 +960,13 @@ const Explore = () => {
               </div>
 
               {/* Metadata Footer: Creator info + GitHub repo */}
-              <div style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                gap: '0.75rem', 
-                paddingTop: '1rem', 
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '0.75rem',
+                paddingTop: '1rem',
                 borderTop: '1px solid rgba(255, 255, 255, 0.08)',
                 fontSize: '0.8rem',
                 color: 'var(--text-muted)'
@@ -977,9 +977,9 @@ const Explore = () => {
                 </div>
 
                 {selectedTeaserDetails.github_repo_url && (
-                  <a 
-                    href={selectedTeaserDetails.github_repo_url} 
-                    target="_blank" 
+                  <a
+                    href={selectedTeaserDetails.github_repo_url}
+                    target="_blank"
                     rel="noreferrer"
                     style={{ color: '#818cf8', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', textDecoration: 'none', fontWeight: 600 }}
                   >

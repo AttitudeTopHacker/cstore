@@ -20,7 +20,7 @@ function App() {
     <Router>
       <div className="App" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <Navbar />
-        <main className="container" style={{ flex: '1 0 auto', width: '100%' }}>
+        <main className="container" style={{ flex: '1 0 auto', width: '100%', paddingTop: 'calc(68px + var(--sat, 0px))' }}>
           <Routes>
             {/* Concept 2 Explore Flagship Page */}
             <Route path="/" element={<Explore />} />

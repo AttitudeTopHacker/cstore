@@ -125,16 +125,19 @@ const Navbar = () => {
   ];
 
   return (
-    <nav style={{
-      position: 'sticky',
+    <nav className="top-navbar" style={{
+      position: 'fixed',
       top: 0,
-      zIndex: 100,
-      background: 'rgba(2, 6, 23, 0.88)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
+      left: 0,
+      right: 0,
+      width: '100%',
+      zIndex: 1000,
+      background: 'rgba(2, 6, 23, 0.92)',
+      backdropFilter: 'blur(24px)',
+      WebkitBackdropFilter: 'blur(24px)',
       borderBottom: '1px solid var(--glass-border)',
       padding: '0.65rem 0',
-      marginBottom: '1rem'
+      transition: 'all 0.2s ease'
     }}>
       <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
         
