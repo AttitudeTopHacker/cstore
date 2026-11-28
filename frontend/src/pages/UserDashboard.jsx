@@ -5,12 +5,26 @@ import {
   User, Download, Calendar, Mail, LayoutGrid, LogOut, Package, 
   Upload, RefreshCw, Rocket, GitBranch, Terminal, Copy, CheckCircle2, 
   Plus, Sparkles, AlertCircle, File, Loader2, ArrowRight, Image as ImageIcon,
-  Info, X, ExternalLink, FileText
+  Info, X, ExternalLink, FileText, Sliders, Edit3, Pencil
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import ConfirmModal from '../components/ConfirmModal';
 import UpdateAppModal from '../components/UpdateAppModal';
+import { parseApkMetadata, getAppCategory, cleanAppDescription, getCategoryBadgeStyle } from '../utils/apkMetadata';
+
+const CATEGORIES = [
+  'Tools',
+  'Productivity',
+  'Social & Communication',
+  'Entertainment & Media',
+  'Games',
+  'Finance & Business',
+  'Utilities',
+  'Education',
+  'Personalization',
+  'Other'
+];
 
 const UserDashboard = () => {
   const { user, token, logout } = useAuth();
@@ -30,6 +44,8 @@ const UserDashboard = () => {
     item: null,
     tab: 'file', // 'file' | 'github'
     file: null,
+    parsedMeta: null,
+    isParsing: false,
     githubRepo: '',
     githubPat: localStorage.getItem('cstore_gh_pat') || '',
     showPatInput: false,
@@ -40,6 +56,18 @@ const UserDashboard = () => {
     error: '',
     progress: 0
   });
+
+  const handlePublishFileSelect = async (file) => {
+    if (!file) return;
+    setPublishModal(prev => ({ ...prev, file, isParsing: true, parsedMeta: null }));
+    try {
+      const meta = await parseApkMetadata(file);
+      setPublishModal(prev => ({ ...prev, parsedMeta: meta, isParsing: false }));
+    } catch (err) {
+      console.warn('Publish modal APK parse:', err);
+      setPublishModal(prev => ({ ...prev, isParsing: false }));
+    }
+  };
 
   const handleFetchGitHubRelease = async (repoInput, patInput) => {
     let cleanRepo = (repoInput || '').trim();
@@ -109,6 +137,7 @@ const UserDashboard = () => {
   const [isTeaserModalOpen, setIsTeaserModalOpen] = useState(false);
   const [teaserForm, setTeaserForm] = useState({
     app_name: '',
+    category: 'Tools',
     tagline: '',
     description: '',
     version: 'v1.0.0-beta',
@@ -123,6 +152,71 @@ const UserDashboard = () => {
   const [teaserIconPreview, setTeaserIconPreview] = useState(null);
   const [teaserLoading, setTeaserLoading] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
+
+  // Edit Pipeline Progress & Teaser Details Modal State
+  const [editTeaserModal, setEditTeaserModal] = useState({
+    isOpen: false,
+    item: null,
+    progress: 50,
+    version: '',
+    estimated_release: 'Coming Soon',
+    tagline: '',
+    description: '',
+    category: 'Tools',
+    loading: false,
+    error: ''
+  });
+
+  const handleOpenEditTeaser = (item) => {
+    setEditTeaserModal({
+      isOpen: true,
+      item,
+      progress: item.progress || 50,
+      version: item.version || '',
+      estimated_release: item.estimated_release || 'Coming Soon',
+      tagline: item.tagline || '',
+      description: cleanAppDescription(item.description || ''),
+      category: getAppCategory(item),
+      loading: false,
+      error: ''
+    });
+  };
+
+  const handleUpdateTeaserProgress = async (e) => {
+    e.preventDefault();
+    if (!editTeaserModal.item) return;
+
+    setEditTeaserModal(prev => ({ ...prev, loading: true, error: '' }));
+    try {
+      const cleanDesc = cleanAppDescription(editTeaserModal.description || '').trim();
+      const finalDesc = editTeaserModal.category
+        ? `[Category: ${editTeaserModal.category}]\n\n${cleanDesc}`.trim()
+        : cleanDesc;
+
+      const progressVal = Math.min(100, Math.max(0, parseInt(editTeaserModal.progress, 10) || 0));
+
+      const { error: updateErr } = await supabase
+        .from('upcoming_releases')
+        .update({
+          progress: progressVal,
+          version: editTeaserModal.version || 'v1.0.0-beta',
+          estimated_release: editTeaserModal.estimated_release || 'Coming Soon',
+          target_date: editTeaserModal.estimated_release || 'Coming Soon',
+          tagline: editTeaserModal.tagline || '',
+          description: finalDesc,
+          tags: [editTeaserModal.category || 'Tools'],
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editTeaserModal.item.id);
+
+      if (updateErr) throw updateErr;
+
+      setEditTeaserModal({ isOpen: false, item: null, progress: 50, version: '', estimated_release: 'Coming Soon', tagline: '', description: '', category: 'Tools', loading: false, error: '' });
+      fetchData();
+    } catch (err) {
+      setEditTeaserModal(prev => ({ ...prev, loading: false, error: err.message || 'Failed to update progress' }));
+    }
+  };
 
   // Complete Draft Build Modal State
   const [selectedDraftApp, setSelectedDraftApp] = useState(null);
@@ -257,13 +351,52 @@ const UserDashboard = () => {
   // Handle Publish Upcoming Release
   const handlePublishUpcoming = async (e) => {
     e.preventDefault();
-    if (!publishModal.file || !publishModal.item) return;
+    if (!publishModal.item) return;
+    if (publishModal.tab === 'file' && !publishModal.file) return;
+    if (publishModal.tab === 'github' && !publishModal.githubRelease) return;
 
     setPublishModal(prev => ({ ...prev, loading: true, error: '' }));
     const releaseItem = publishModal.item;
-    const apkFile = publishModal.file;
 
     try {
+      let apkFile = publishModal.file;
+
+      // In Option B (GitHub Release), auto-stream APK directly from GitHub!
+      if (!apkFile && publishModal.tab === 'github' && publishModal.githubRelease) {
+        setPublishModal(prev => ({ ...prev, progress: 5 }));
+        const release = publishModal.githubRelease;
+        let blob = null;
+
+        // Try local dev proxy first
+        try {
+          const proxyRes = await fetch(`/api/download-github-apk?url=${encodeURIComponent(release.downloadUrl)}`, {
+            headers: publishModal.githubPat ? { 'x-github-token': publishModal.githubPat } : {}
+          });
+          if (proxyRes.ok) {
+            blob = await proxyRes.blob();
+          }
+        } catch (_) {}
+
+        // Fallback: direct fetch
+        if (!blob) {
+          try {
+            const directRes = await fetch(release.downloadUrl);
+            if (directRes.ok) {
+              blob = await directRes.blob();
+            }
+          } catch (_) {}
+        }
+
+        if (!blob) {
+          throw new Error('Unable to stream APK directly from GitHub. Please check network or use Option A.');
+        }
+
+        apkFile = new File([blob], release.apkName, { type: 'application/vnd.android.package-archive' });
+      }
+
+      if (!apkFile) {
+        throw new Error('No APK file available to upload.');
+      }
       const CHUNK_SIZE = 9 * 1024 * 1024; // 9MB chunks
       const totalChunks = Math.ceil(apkFile.size / CHUNK_SIZE);
       const isChunked = totalChunks > 1;
@@ -307,6 +440,23 @@ const UserDashboard = () => {
 
       let targetAppId = null;
 
+      // If releaseItem has no icon, but parsed APK provided one, upload it!
+      let liveIconUrl = releaseItem.icon_url || null;
+      if (!liveIconUrl && publishModal.parsedMeta?.iconFile) {
+        try {
+          const iconFileName = `icons/${Date.now()}_${publishModal.parsedMeta.iconFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+          const { error: iconErr } = await supabase.storage.from('cstore-icons').upload(iconFileName, publishModal.parsedMeta.iconFile, { upsert: true });
+          if (!iconErr) {
+            const { data: { publicUrl } } = supabase.storage.from('cstore-icons').getPublicUrl(iconFileName);
+            liveIconUrl = publicUrl;
+          }
+        } catch (_) {}
+      }
+
+      const effectiveVersion = (releaseItem.version && releaseItem.version !== 'Coming Soon')
+        ? releaseItem.version
+        : (publishModal.parsedMeta?.version || 'v1.0.0');
+
       if (releaseItem.is_update && releaseItem.existing_app_id) {
         // App Update Flow: Archive old version & update existing app record
         const { data: currentApp } = await supabase
@@ -322,7 +472,7 @@ const UserDashboard = () => {
               version: currentApp.version,
               file_url: currentApp.file_url,
               size: currentApp.size,
-              changelog: `Updated to ${releaseItem.version}`
+              changelog: `Updated to ${effectiveVersion}`
             }]);
           } catch (_) {}
         }
@@ -330,7 +480,7 @@ const UserDashboard = () => {
         const { error: appUpdateErr } = await supabase
           .from('apps')
           .update({
-            version: releaseItem.version,
+            version: effectiveVersion,
             description: releaseItem.description || currentApp?.description,
             file_url: finalFileUrl,
             size: sizeMB,
@@ -348,10 +498,10 @@ const UserDashboard = () => {
           .from('apps')
           .insert([{
             name: releaseItem.app_name,
-            version: releaseItem.version,
+            version: effectiveVersion,
             description: releaseItem.description,
             file_url: finalFileUrl,
-            icon_url: releaseItem.icon_url || null,
+            icon_url: liveIconUrl,
             size: sizeMB,
             is_chunked: isChunked,
             chunk_count: totalChunks,
@@ -427,10 +577,16 @@ const UserDashboard = () => {
         }
       }
 
+      let finalDesc = teaserForm.description?.trim() || '';
+      if (teaserForm.category && !finalDesc.includes('[Category:')) {
+        finalDesc = `[Category: ${teaserForm.category}]\n\n${finalDesc}`.trim();
+      }
+
       const { error } = await supabase.from('upcoming_releases').insert([{
         app_name: teaserForm.app_name,
         tagline: teaserForm.tagline || '',
-        description: teaserForm.description || '',
+        description: finalDesc,
+        tags: [teaserForm.category || 'Tools'],
         version: teaserForm.version || 'v1.0.0-beta',
         estimated_release: teaserForm.estimated_release || 'Coming Soon',
         target_date: teaserForm.estimated_release || 'Coming Soon',
@@ -447,7 +603,7 @@ const UserDashboard = () => {
 
       if (error) throw error;
       setIsTeaserModalOpen(false);
-      setTeaserForm({ app_name: '', tagline: '', description: '', version: 'v1.0.0-beta', estimated_release: 'Coming Soon', progress: 50, github_repo_url: '', icon_url: '', is_update: false, existing_app_id: null });
+      setTeaserForm({ app_name: '', category: 'Tools', tagline: '', description: '', version: 'v1.0.0-beta', estimated_release: 'Coming Soon', progress: 50, github_repo_url: '', icon_url: '', is_update: false, existing_app_id: null });
       setTeaserIconFile(null);
       setTeaserIconPreview(null);
       fetchData();
@@ -462,53 +618,53 @@ const UserDashboard = () => {
     <div style={{ padding: '2.5rem 0' }}>
       
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '2.2rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+          <h1 style={{ fontSize: 'clamp(1.45rem, 5vw, 2.2rem)', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
             Developer & User Console
           </h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: '0.35rem' }}>Welcome back, {user?.name}!</p>
+          <p style={{ color: 'var(--text-muted)', marginTop: '0.35rem', fontSize: '0.88rem' }}>Welcome back, {user?.name}!</p>
         </div>
-        <button onClick={confirmLogout} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '10px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+        <button onClick={confirmLogout} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '9px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}>
           <LogOut size={16} /> Logout
         </button>
       </div>
 
       {/* Profile Card */}
-      <div className="glass" style={{ padding: '2rem', marginBottom: '2.5rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap', borderRadius: '20px' }}>
-        <div style={{ width: '74px', height: '74px', borderRadius: '50%', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+      <div className="glass" style={{ padding: 'clamp(1.2rem, 3.5vw, 2rem)', marginBottom: '2.5rem', display: 'flex', gap: 'clamp(1rem, 3vw, 2rem)', alignItems: 'center', flexWrap: 'wrap', borderRadius: '20px' }}>
+        <div style={{ width: 'clamp(58px, 14vw, 74px)', height: 'clamp(58px, 14vw, 74px)', borderRadius: '50%', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
           {user?.avatar_url ? (
             <img src={user.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{(user?.name || user?.email || 'U').charAt(0).toUpperCase()}</span>
+            <span style={{ fontSize: 'clamp(1.4rem, 4vw, 1.8rem)', fontWeight: 800, color: 'white' }}>{(user?.name || user?.email || 'U').charAt(0).toUpperCase()}</span>
           )}
         </div>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: '1.4rem', marginBottom: '0.4rem', color: 'white' }}>{profile?.name}</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem' }}>
-            <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}>
-              <Mail size={15} /> {profile?.email}
+        <div style={{ flex: 1, minWidth: '220px' }}>
+          <h2 style={{ fontSize: 'clamp(1.2rem, 3.5vw, 1.4rem)', marginBottom: '0.4rem', color: 'white' }}>{profile?.name}</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+            <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.84rem' }}>
+              <Mail size={14} /> {profile?.email}
             </span>
-            <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem' }}>
-              <Calendar size={15} /> Member since {formatDate(profile?.created_at || new Date())}
+            <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.84rem' }}>
+              <Calendar size={14} /> Member since {formatDate(profile?.created_at || new Date())}
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '12px', padding: '10px 18px', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#6366f1' }}>{myApps.length}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Published Apps</div>
+        <div style={{ display: 'flex', gap: '0.75rem', width: 'auto', flexWrap: 'wrap' }}>
+          <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '12px', padding: '8px 14px', textAlign: 'center', flex: 1, minWidth: '85px' }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#6366f1' }}>{myApps.length}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Published Apps</div>
           </div>
-          <div style={{ background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '12px', padding: '10px 18px', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#a855f7' }}>{myUpcoming.length}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Teasers</div>
+          <div style={{ background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '12px', padding: '8px 14px', textAlign: 'center', flex: 1, minWidth: '85px' }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#a855f7' }}>{myUpcoming.length}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Teasers</div>
           </div>
         </div>
       </div>
 
       {/* ── 1. MY UPCOMING RELEASES (COMING SOON) ─────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <h3 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.85rem' }}>
+        <h3 style={{ fontSize: 'clamp(1.1rem, 3.5vw, 1.25rem)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'white' }}>
           <Rocket size={18} color="#f59e0b" /> My Upcoming Releases ({myUpcoming.length})
         </h3>
         <button
@@ -521,9 +677,9 @@ const UserDashboard = () => {
       </div>
 
       {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
           {[1, 2].map(n => (
-            <div key={n} className="glass skeleton-card" style={{ padding: '1.5rem', borderRadius: '18px', display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: '170px' }}>
+            <div key={n} className="glass skeleton-card app-card" style={{ padding: '1.25rem 1.15rem', borderRadius: '18px', display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: '170px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                 <div className="skeleton-shimmer" style={{ width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0 }} />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -539,7 +695,7 @@ const UserDashboard = () => {
           ))}
         </div>
       ) : myUpcoming.length === 0 ? (
-        <div className="glass" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '18px', marginBottom: '2.5rem' }}>
+        <div className="glass app-card" style={{ padding: '2.5rem', textAlign: 'center', borderRadius: '18px', marginBottom: '2.5rem' }}>
           <Rocket size={36} style={{ color: '#f59e0b', opacity: 0.5, marginBottom: '0.75rem' }} />
           <h4 style={{ fontSize: '1.1rem', marginBottom: '0.4rem', color: 'white' }}>No Active Teasers</h4>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '450px', margin: '0 auto 1.25rem' }}>
@@ -550,13 +706,13 @@ const UserDashboard = () => {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
           {myUpcoming.map(item => (
             <div
               key={item.id}
-              className="glass card-loaded-fade"
+              className="glass card-loaded-fade app-card"
               style={{
-                padding: '1.4rem',
+                padding: 'clamp(1.15rem, 3.5vw, 1.4rem)',
                 borderRadius: '18px',
                 border: item.is_published 
                   ? '1px solid rgba(16, 185, 129, 0.35)' 
@@ -596,6 +752,29 @@ const UserDashboard = () => {
                       {isAppUpdate(item) ? 'APP UPDATE' : 'NEW LAUNCH'}
                     </span>
 
+                    {/* Category Pill */}
+                    {(() => {
+                      const cat = getAppCategory(item);
+                      const style = getCategoryBadgeStyle(cat);
+                      return (
+                        <span style={{
+                          fontSize: '0.65rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.04em',
+                          padding: '3px 9px',
+                          borderRadius: '20px',
+                          background: style.bg,
+                          color: style.color,
+                          border: `1px solid ${style.border}`,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {cat}
+                        </span>
+                      );
+                    })()}
+
                     {/* Source Pill: GitHub CI/CD vs Manual Upload */}
                     <span style={{
                       fontSize: '0.63rem',
@@ -615,41 +794,66 @@ const UserDashboard = () => {
                     </span>
                   </div>
 
-                  {/* Status Indicator */}
-                  {item.is_published ? (
-                    <span style={{
-                      fontSize: '0.64rem',
-                      padding: '3px 9px',
-                      borderRadius: '20px',
-                      background: 'rgba(16, 185, 129, 0.18)',
-                      color: '#34d399',
-                      border: '1px solid rgba(16, 185, 129, 0.35)',
-                      fontWeight: 800,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      <CheckCircle2 size={10} /> LIVE
-                    </span>
-                  ) : (
-                    <span style={{
-                      fontSize: '0.64rem',
-                      padding: '3px 8px',
-                      borderRadius: '20px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      color: '#cbd5e1',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' }} />
-                      In Pipeline
-                    </span>
-                  )}
+                  {/* Status Indicator & Quick Edit */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditTeaser(item)}
+                      style={{
+                        fontSize: '0.64rem',
+                        padding: '3px 8px',
+                        borderRadius: '20px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: '#cbd5e1',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = '#cbd5e1'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'; }}
+                      title="Edit progress & milestone"
+                    >
+                      <Edit3 size={10} /> Edit
+                    </button>
+                    {item.is_published ? (
+                      <span style={{
+                        fontSize: '0.64rem',
+                        padding: '3px 9px',
+                        borderRadius: '20px',
+                        background: 'rgba(16, 185, 129, 0.18)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        fontWeight: 800,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <CheckCircle2 size={10} /> LIVE
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: '0.64rem',
+                        padding: '3px 8px',
+                        borderRadius: '20px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: '#cbd5e1',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' }} />
+                        In Pipeline
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* 2. App Name & Icon: Full Horizontal Width without wrapping */}
@@ -738,20 +942,53 @@ const UserDashboard = () => {
                   </button>
                 </div>
 
-                {/* 4. Progress bar */}
+                {/* 4. Progress bar with interactive Update action */}
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                    <span>Pipeline Progress</span>
-                    <span style={{ color: '#a5b4fc', fontWeight: 700 }}>{item.progress}% Completed</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Pipeline Progress</span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditTeaser(item)}
+                        style={{
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          color: '#c084fc',
+                          padding: '1px 7px',
+                          borderRadius: '6px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          transition: 'all 0.2s'
+                        }}
+                        title="Click to update pipeline progress"
+                      >
+                        <Sliders size={10} /> Update
+                      </button>
+                    </div>
+                    <span
+                      onClick={() => handleOpenEditTeaser(item)}
+                      style={{ color: '#a5b4fc', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                      title="Click to edit progress"
+                    >
+                      {item.progress}% Completed
+                    </span>
                   </div>
-                  <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                  <div
+                    onClick={() => handleOpenEditTeaser(item)}
+                    style={{ height: '7px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', cursor: 'pointer' }}
+                    title="Click to update progress"
+                  >
                     <div style={{
                       height: '100%',
                       width: `${item.progress}%`,
                       background: isAppUpdate(item)
                         ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
                         : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
-                      borderRadius: '3px',
+                      borderRadius: '4px',
                       transition: 'width 0.4s ease'
                     }} />
                   </div>
@@ -904,6 +1141,23 @@ const UserDashboard = () => {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 800, color: 'white', fontSize: '1.1rem' }}>{app.name}</span>
+                        {(() => {
+                          const cat = getAppCategory(app);
+                          const style = getCategoryBadgeStyle(cat);
+                          return (
+                            <span style={{
+                              fontSize: '0.66rem',
+                              padding: '1px 7px',
+                              borderRadius: '5px',
+                              background: style.bg,
+                              border: `1px solid ${style.border}`,
+                              color: style.color,
+                              fontWeight: 700
+                            }}>
+                              {cat}
+                            </span>
+                          );
+                        })()}
                         <span style={{ fontSize: '0.75rem', color: '#a5b4fc', fontWeight: 600 }}>{app.version}</span>
                         <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '20px', background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.3)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                           <GitBranch size={9} /> GitHub Actions
@@ -981,6 +1235,23 @@ const UserDashboard = () => {
                     <div style={{ flex: 1, minWidth: '150px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600, color: 'white' }}>{app.name}</span>
+                        {(() => {
+                          const cat = getAppCategory(app);
+                          const style = getCategoryBadgeStyle(cat);
+                          return (
+                            <span style={{
+                              fontSize: '0.66rem',
+                              padding: '1px 7px',
+                              borderRadius: '5px',
+                              background: style.bg,
+                              border: `1px solid ${style.border}`,
+                              color: style.color,
+                              fontWeight: 700
+                            }}>
+                              {cat}
+                            </span>
+                          );
+                        })()}
                         {app.updated_by_admin && (
                           <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.35)' }}>
                             ⚡ Admin by Update
@@ -1099,8 +1370,8 @@ const UserDashboard = () => {
       
       {/* 1. Publish Upcoming Release Modal */}
       {publishModal.isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="glass" style={{ maxWidth: '540px', width: '100%', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.4)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}>
+          <div className="glass" style={{ maxWidth: '540px', width: '100%', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.4)', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <Rocket size={24} color="#f59e0b" />
@@ -1163,6 +1434,7 @@ const UserDashboard = () => {
             </div>
 
             <form onSubmit={handlePublishUpcoming} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Option B: GitHub Release Controls */}
               {publishModal.tab === 'github' && (
                 <div style={{ background: 'rgba(99, 102, 241, 0.06)', borderRadius: '14px', padding: '1.1rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.82rem', color: '#a5b4fc', fontWeight: 600 }}>
@@ -1217,68 +1489,112 @@ const UserDashboard = () => {
                   )}
 
                   {publishModal.githubRelease && (
-                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '0.85rem', marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, color: '#34d399', fontSize: '0.88rem' }}>
-                          ✓ Found: {publishModal.githubRelease.tagName} ({publishModal.githubRelease.apkSize})
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '12px', padding: '0.9rem', marginTop: '0.65rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#34d399', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <CheckCircle2 size={16} /> Release Detected: {publishModal.githubRelease.tagName} ({publishModal.githubRelease.apkSize})
+                          </div>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            File: <strong>{publishModal.githubRelease.apkName}</strong>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-                          File: {publishModal.githubRelease.apkName}
-                        </div>
+                        <span style={{ fontSize: '0.72rem', color: '#a5b4fc', background: 'rgba(99, 102, 241, 0.18)', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '3px 9px', borderRadius: '10px', fontWeight: 700 }}>
+                          Direct Stream Ready
+                        </span>
                       </div>
-                      <a
-                        href={publishModal.githubRelease.downloadUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          fontSize: '0.78rem',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.1)',
-                          color: 'white',
-                          textDecoration: 'none',
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Download size={12} /> Download APK
-                      </a>
+                      <p style={{ margin: '0.65rem 0 0', fontSize: '0.77rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                        Click <strong>"Confirm & Launch Live"</strong> below. CStore will stream the release APK directly from GitHub, chunk it into Supabase Storage, and launch to the store!
+                      </p>
                     </div>
                   )}
                 </div>
               )}
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {publishModal.tab === 'github' ? 'Drop or Select the Release APK File to Upload' : 'Select Android APK File (.apk)'}
-                </label>
-                <div style={{ position: 'relative', border: '2px dashed var(--glass-border)', borderRadius: '14px', padding: '1.75rem', textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.02)' }}>
-                  <input
-                    type="file"
-                    accept=".apk"
-                    required
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) setPublishModal(prev => ({ ...prev, file }));
+              {/* Option A ONLY: Dropzone */}
+              {publishModal.tab === 'file' && (
+                <div>
+                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    <span>Select Android APK File (.apk)</span>
+                    <span style={{ fontSize: '0.74rem', color: '#a855f7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Sparkles size={12} /> Auto-detects Version & Icon
+                    </span>
+                  </label>
+                  <div 
+                    style={{ 
+                      position: 'relative', 
+                      border: publishModal.file ? '2px solid rgba(99, 102, 241, 0.4)' : '2px dashed var(--glass-border)', 
+                      borderRadius: '14px', 
+                      padding: '1.5rem', 
+                      textAlign: 'center', 
+                      cursor: 'pointer', 
+                      background: publishModal.file ? 'rgba(99, 102, 241, 0.04)' : 'rgba(255,255,255,0.02)',
+                      transition: 'all 0.2s ease'
                     }}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-                  />
-                  <File size={30} style={{ color: 'var(--primary)', margin: '0 auto 0.5rem' }} />
-                  <div style={{ fontWeight: 600, color: 'white', fontSize: '0.95rem' }}>
-                    {publishModal.file ? publishModal.file.name : 'Choose or Drag APK File'}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                    onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = publishModal.file ? 'rgba(99, 102, 241, 0.4)' : 'var(--glass-border)'; }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const dropped = e.dataTransfer.files[0];
+                      if (dropped && dropped.name.endsWith('.apk')) {
+                        handlePublishFileSelect(dropped);
+                      } else {
+                        alert('Please drop a valid .apk file');
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      accept=".apk"
+                      required
+                      onChange={(e) => handlePublishFileSelect(e.target.files[0])}
+                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', zIndex: 2 }}
+                    />
+                    {publishModal.isParsing ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', color: '#a855f7' }}>
+                        <Loader2 size={26} className="animate-spin" />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Reading APK metadata & icon...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <File size={30} style={{ color: publishModal.file ? '#a855f7' : 'var(--primary)', margin: '0 auto 0.5rem' }} />
+                        <div style={{ fontWeight: 600, color: 'white', fontSize: '0.95rem' }}>
+                          {publishModal.file ? publishModal.file.name : 'Choose or Drag APK File'}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {publishModal.file ? `${(publishModal.file.size / (1024 * 1024)).toFixed(1)} MB` : 'Up to 500MB chunked'}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {publishModal.file ? `${(publishModal.file.size / (1024 * 1024)).toFixed(1)} MB` : 'Up to 500MB chunked'}
-                  </div>
+
+                  {publishModal.parsedMeta && (
+                    <div style={{ 
+                      marginTop: '0.65rem', 
+                      padding: '0.55rem 0.85rem', 
+                      background: 'linear-gradient(90deg, rgba(168, 85, 247, 0.12) 0%, rgba(99, 102, 241, 0.12) 100%)', 
+                      border: '1px solid rgba(168, 85, 247, 0.3)', 
+                      borderRadius: '10px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.6rem', 
+                      fontSize: '0.78rem',
+                      color: '#e2e8f0'
+                    }}>
+                      <Sparkles size={14} style={{ color: '#c084fc', flexShrink: 0 }} />
+                      <div>
+                        <strong>APK Auto-Detected:</strong> {publishModal.parsedMeta.name || 'App'} • {publishModal.parsedMeta.version || 'v1.0.0'} • {publishModal.parsedMeta.size}
+                        {publishModal.parsedMeta.iconDataUrl ? ' • Icon extracted' : ''}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {publishModal.loading && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                    <span>Chunk Uploading to Supabase...</span>
+                    <span>{publishModal.tab === 'github' ? 'Streaming & Uploading to Supabase...' : 'Chunk Uploading to Supabase...'}</span>
                     <span style={{ color: '#34d399', fontWeight: 700 }}>{publishModal.progress}%</span>
                   </div>
                   <div style={{ height: '7px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
@@ -1302,11 +1618,11 @@ const UserDashboard = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={publishModal.loading || !publishModal.file}
+                  disabled={publishModal.loading || (publishModal.tab === 'file' ? !publishModal.file : !publishModal.githubRelease)}
                   className="btn-primary"
                   style={{ padding: '9px 20px', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                 >
-                  {publishModal.loading ? <><Loader2 size={16} className="animate-spin" /> Publishing...</> : 'Confirm & Launch Live'}
+                  {publishModal.loading ? <><Loader2 size={16} className="animate-spin" /> {publishModal.tab === 'github' ? 'Streaming & Deploying...' : 'Publishing...'}</> : 'Confirm & Launch Live'}
                 </button>
               </div>
             </form>
@@ -1316,17 +1632,27 @@ const UserDashboard = () => {
 
       {/* 2. Create Teaser Modal */}
       {isTeaserModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="glass" style={{ maxWidth: '520px', width: '100%', padding: '2rem', borderRadius: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-              <Rocket size={22} color="#f59e0b" />
-              <h3 style={{ margin: 0, fontSize: '1.3rem', color: 'white' }}>Create Coming Soon Teaser</h3>
+        <div className="modal-backdrop-in" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}>
+          <div className="glass modal-card-in" style={{ maxWidth: '520px', width: '100%', padding: '1.75rem', borderRadius: '24px', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Rocket size={22} color="#f59e0b" />
+                <h3 style={{ margin: 0, fontSize: '1.3rem', color: 'white' }}>Create Coming Soon Teaser</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTeaserModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginBottom: '1rem' }}>
               Build hype for your upcoming application on the Concept 2 Explore Deck.
             </p>
 
-            <form onSubmit={handleCreateTeaser} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleCreateTeaser} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               {/* Teaser Type Toggle */}
               <div style={{ display: 'flex', gap: '0.6rem', padding: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
                 <button
@@ -1420,7 +1746,7 @@ const UserDashboard = () => {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="modal-responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Target Version</label>
                   <input
@@ -1441,6 +1767,24 @@ const UserDashboard = () => {
                     style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px', borderRadius: '10px', color: 'white', fontFamily: 'inherit' }}
                   />
                 </div>
+              </div>
+
+              {/* App Category Selector */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Category *
+                </label>
+                <select
+                  value={teaserForm.category || 'Tools'}
+                  onChange={e => setTeaserForm({ ...teaserForm, category: e.target.value })}
+                  style={{ width: '100%', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--glass-border)', padding: '10px', borderRadius: '10px', color: 'white', fontFamily: 'inherit', cursor: 'pointer' }}
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat} style={{ background: '#0f172a', color: 'white' }}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -1691,7 +2035,32 @@ const UserDashboard = () => {
             {/* Progress Milestone Bar */}
             <div style={{ marginBottom: '1.25rem', background: 'rgba(255, 255, 255, 0.03)', padding: '0.9rem 1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', fontSize: '0.8rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Development Milestone:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Development Milestone:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = selectedTeaserDetails;
+                      handleCloseTeaser();
+                      handleOpenEditTeaser(item);
+                    }}
+                    style={{
+                      background: 'rgba(99, 102, 241, 0.18)',
+                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                      color: '#c084fc',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Sliders size={11} /> Edit Progress
+                  </button>
+                </div>
                 <span style={{ fontWeight: 800, color: selectedTeaserDetails.is_update ? '#fbbf24' : '#818cf8' }}>
                   {selectedTeaserDetails.progress || 50}% Completed
                 </span>
@@ -1922,6 +2291,284 @@ const UserDashboard = () => {
                 >
                   {draftLoading ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
                   {draftLoading ? 'Publishing...' : 'Publish to Live Store'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── 5. Edit Pipeline Progress & Teaser Modal ──────────────────────── */}
+      {editTeaserModal.isOpen && editTeaserModal.item && createPortal(
+        <div
+          className="modal-backdrop-in"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(2, 6, 23, 0.85)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            overflowY: 'auto'
+          }}
+          onClick={() => setEditTeaserModal(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            className="glass modal-card-in"
+            style={{
+              maxWidth: '540px',
+              width: '100%',
+              padding: '1.75rem',
+              borderRadius: '24px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              background: '#0b132b',
+              border: editTeaserModal.item.is_update ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(99, 102, 241, 0.4)',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(99, 102, 241, 0.25)',
+              position: 'relative'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(168, 85, 247, 0.4)'
+                }}>
+                  <Sliders size={20} color="#c084fc" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'white', fontWeight: 800 }}>Update Pipeline Progress</h3>
+                  <div style={{ fontSize: '0.78rem', color: '#a5b4fc', marginTop: '2px' }}>
+                    {editTeaserModal.item.app_name} • {editTeaserModal.item.is_update ? 'App Update' : 'New Launch'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditTeaserModal(prev => ({ ...prev, isOpen: false }))}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px', borderRadius: '50%' }}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+              Update how far development has progressed for this release. Your cards across the Explore deck and dashboard will reflect this in real time.
+            </p>
+
+            {editTeaserModal.error && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '10px 14px', borderRadius: '10px', fontSize: '0.83rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>{editTeaserModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateTeaserProgress} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              
+              {/* 1. Interactive Progress Slider Section */}
+              <div style={{
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '1.2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.85rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Sparkles size={14} color="#f59e0b" /> Development Progress
+                  </label>
+                  <span style={{
+                    fontSize: '1.15rem',
+                    fontWeight: 900,
+                    color: editTeaserModal.progress >= 90 ? '#34d399' : editTeaserModal.progress >= 50 ? '#c084fc' : '#fbbf24',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '3px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    {editTeaserModal.progress}%
+                  </span>
+                </div>
+
+                {/* Range Slider */}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={editTeaserModal.progress}
+                  onChange={e => setEditTeaserModal(prev => ({ ...prev, progress: parseInt(e.target.value, 10) }))}
+                  style={{ width: '100%', accentColor: '#c084fc', cursor: 'pointer', height: '6px' }}
+                />
+
+                {/* Animated Visual Progress Bar Preview */}
+                <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${editTeaserModal.progress}%`,
+                    background: editTeaserModal.item.is_update
+                      ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
+                      : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+                    borderRadius: '4px',
+                    transition: 'width 0.25s ease'
+                  }} />
+                </div>
+
+                {/* Quick Preset Buttons */}
+                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  {[
+                    { label: '25% Start', val: 25 },
+                    { label: '50% Core', val: 50 },
+                    { label: '75% Alpha', val: 75 },
+                    { label: '90% Beta', val: 90 },
+                    { label: '100% Ready', val: 100 }
+                  ].map(preset => {
+                    const isSelected = editTeaserModal.progress === preset.val;
+                    return (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setEditTeaserModal(prev => ({ ...prev, progress: preset.val }))}
+                        style={{
+                          flex: 1,
+                          minWidth: '65px',
+                          padding: '6px 8px',
+                          borderRadius: '8px',
+                          border: isSelected ? '1px solid #c084fc' : '1px solid rgba(255, 255, 255, 0.08)',
+                          background: isSelected ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255, 255, 255, 0.03)',
+                          color: isSelected ? 'white' : 'var(--text-muted)',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Milestone Helper Text */}
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', background: 'rgba(255, 255, 255, 0.03)', padding: '6px 10px', borderRadius: '8px', borderLeft: '3px solid #a855f7' }}>
+                  {editTeaserModal.progress <= 20 && '🚀 Phase 1: Planning, requirements & architecture definition'}
+                  {editTeaserModal.progress > 20 && editTeaserModal.progress <= 40 && '🛠️ Phase 2: Core engine, database & API setup in progress'}
+                  {editTeaserModal.progress > 40 && editTeaserModal.progress <= 60 && '🎨 Phase 3: UI design, key workflows & user experience built'}
+                  {editTeaserModal.progress > 60 && editTeaserModal.progress <= 80 && '🧪 Phase 4: Internal Alpha/Beta testing, fixing bugs & optimizing'}
+                  {editTeaserModal.progress > 80 && editTeaserModal.progress < 100 && '✨ Phase 5: Final QA checks, release notes & pre-launch polish'}
+                  {editTeaserModal.progress === 100 && '🎉 Phase 6: 100% Complete! Ready to upload APK & launch live'}
+                </div>
+              </div>
+
+              {/* 2. Version & Estimated Release Date */}
+              <div className="modal-responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Target Version</label>
+                  <input
+                    type="text"
+                    value={editTeaserModal.version}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, version: e.target.value }))}
+                    placeholder="e.g. v1.1.0-beta"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Estimated Date</label>
+                  <input
+                    type="text"
+                    value={editTeaserModal.estimated_release}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, estimated_release: e.target.value }))}
+                    placeholder="e.g. Next Week / Dec 2026"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* 3. Category & Short Tagline */}
+              <div className="modal-responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Category</label>
+                  <select
+                    value={editTeaserModal.category}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, category: e.target.value }))}
+                    style={{ width: '100%', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem', cursor: 'pointer' }}
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat} style={{ background: '#0f172a', color: 'white' }}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Short Tagline</label>
+                  <input
+                    type="text"
+                    value={editTeaserModal.tagline}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, tagline: e.target.value }))}
+                    placeholder="One sentence summary..."
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* 4. Detailed Description */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Detailed Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={editTeaserModal.description}
+                  onChange={e => setEditTeaserModal(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe recent progress milestones or features added..."
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem', resize: 'none' }}
+                />
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditTeaserModal(prev => ({ ...prev, isOpen: false }))}
+                  style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-border)', borderRadius: '10px', color: '#cbd5e1', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editTeaserModal.loading}
+                  className="btn-primary"
+                  style={{
+                    flex: 2,
+                    padding: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    boxShadow: '0 4px 15px rgba(168, 85, 247, 0.35)',
+                    fontSize: '0.88rem'
+                  }}
+                >
+                  {editTeaserModal.loading ? <Loader2 size={16} className="animate-spin" /> : <Sliders size={16} />}
+                  {editTeaserModal.loading ? 'Updating...' : 'Save & Update Card'}
                 </button>
               </div>
             </form>

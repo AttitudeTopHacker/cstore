@@ -108,7 +108,7 @@ jobs:
       </div>
 
       {/* ── 2. Core Architecture Highlights ────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
         
         <div className="glass" style={{ padding: '1.5rem', borderRadius: '18px', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a5b4fc', marginBottom: '1rem' }}>
@@ -336,7 +336,7 @@ jobs:
           </h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '1rem' }}>
           <div className="glass" style={{ padding: '1.25rem', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
             <h4 style={{ color: 'white', margin: '0 0 0.4rem', fontSize: '0.95rem' }}>
               Q: Does manual upload still work?

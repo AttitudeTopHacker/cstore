@@ -10,6 +10,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth, isAdminUser } from '../context/AuthContext';
 import { DownloadManager } from '../utils/DownloadManager';
 import ProgressModal from '../components/ProgressModal';
+import { getAppCategory, cleanAppDescription, getCategoryBadgeStyle } from '../utils/apkMetadata';
 
 const Explore = () => {
   const navigate = useNavigate();
@@ -174,7 +175,7 @@ const Explore = () => {
           </div>
 
           {/* Carousel Arrow Controls */}
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="desktop-only" style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               onClick={() => scrollCarousel('left')}
               aria-label="Previous Apps"
@@ -223,6 +224,7 @@ const Explore = () => {
         {/* Horizontal Swipeable Stream Rail */}
         <div
           ref={carouselRef}
+          className="scroll-touch-x"
           style={{
             display: 'flex',
             gap: '1.25rem',
@@ -324,9 +326,29 @@ const Explore = () => {
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {app.name}
-                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {app.name}
+                      </h3>
+                      {(() => {
+                        const cat = getAppCategory(app);
+                        const style = getCategoryBadgeStyle(cat);
+                        return (
+                          <span style={{
+                            fontSize: '0.62rem',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: style.bg,
+                            border: `1px solid ${style.border}`,
+                            color: style.color,
+                            fontWeight: 700,
+                            flexShrink: 0
+                          }}>
+                            {cat}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
                       <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
                         {app.version || 'v1.0'}
@@ -340,7 +362,7 @@ const Explore = () => {
                 </div>
 
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.4, margin: '0 0 0.35rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {app.description || 'Verified fast Android package on CStore.'}
+                  {cleanAppDescription(app.description) || 'Verified fast Android package on CStore.'}
                 </p>
 
                 {/* Active Update Teaser Badge or Admin Update Badge on App Card */}
@@ -437,7 +459,7 @@ const Explore = () => {
         </div>
 
         {/* Compact Core Team Cards (Height ends right at Role Badge) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1rem' }}>
           {loading ? (
             [1, 2].map(n => (
               <div
@@ -578,7 +600,7 @@ const Explore = () => {
         </div>
 
         {/* Compact Coming Soon Cards (Exact matching compact height) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1rem' }}>
           {loading ? (
             [1, 2].map(n => (
               <div
@@ -664,12 +686,30 @@ const Explore = () => {
 
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'nowrap' }}>
-                      <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '190px' }}>
+                      <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
                         {rel.app_name}
                       </h3>
                       <span style={{ fontSize: '0.7rem', color: isUpdate ? '#fbbf24' : '#a855f7', fontWeight: 700, flexShrink: 0 }}>
                         {isUpdate ? `Update ${rel.version}` : rel.version || 'v1.0'}
                       </span>
+                      {(() => {
+                        const cat = getAppCategory(rel);
+                        const style = getCategoryBadgeStyle(cat);
+                        return (
+                          <span style={{
+                            fontSize: '0.62rem',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: style.bg,
+                            border: `1px solid ${style.border}`,
+                            color: style.color,
+                            fontWeight: 700,
+                            flexShrink: 0
+                          }}>
+                            {cat}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* Progress Bar & Milestone */}
@@ -811,6 +851,23 @@ const Explore = () => {
                       }}>
                         {isModalUpdate ? 'Version Update' : 'New Release'}
                       </span>
+                      {(() => {
+                        const cat = getAppCategory(selectedTeaserDetails);
+                        const style = getCategoryBadgeStyle(cat);
+                        return (
+                          <span style={{
+                            fontSize: '0.66rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: style.bg,
+                            border: `1px solid ${style.border}`,
+                            color: style.color
+                          }}>
+                            {cat}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div style={{ fontSize: '0.82rem', color: '#a5b4fc', marginTop: '0.2rem', fontWeight: 600 }}>
                       Target Version: <span style={{ color: 'white' }}>{selectedTeaserDetails.version || 'v1.0.0'}</span> • Estimated: <span style={{ color: 'white' }}>{isModalUpdate ? 'Update Soon' : (selectedTeaserDetails.estimated_release || 'Coming Soon')}</span>
@@ -898,7 +955,7 @@ const Explore = () => {
                   lineHeight: 1.65,
                   whiteSpace: 'pre-wrap'
                 }}>
-                  {selectedTeaserDetails.description || selectedTeaserDetails.tagline || 'No extended description provided yet. Check back soon!'}
+                  {cleanAppDescription(selectedTeaserDetails.description) || selectedTeaserDetails.tagline || 'No extended description provided yet. Check back soon!'}
                 </div>
               </div>
 

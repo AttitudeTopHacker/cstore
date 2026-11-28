@@ -45,7 +45,7 @@ const Developers = () => {
       </div>
 
       {/* Grid of Team Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
         {loading ? (
           [1, 2, 3].map(n => (
             <div

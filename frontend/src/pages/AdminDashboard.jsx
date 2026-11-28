@@ -1,22 +1,37 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import {
   Users, Package, Download, Trash2, Upload, LogOut, LayoutGrid,
   ShieldCheck, AlertCircle, CheckCircle, Loader2, RefreshCw, File, Image as ImageIcon,
-  UserX, UserCheck, Store, Sparkles, Rocket, Plus, ExternalLink, Github, GitBranch
+  UserX, UserCheck, Store, Sparkles, Rocket, Plus, ExternalLink, Github, GitBranch,
+  Sliders, Edit3, X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import UpdateAppModal from '../components/UpdateAppModal';
+import { getAppCategory, cleanAppDescription, getCategoryBadgeStyle } from '../utils/apkMetadata';
+
+const CATEGORIES = [
+  'Tools',
+  'Productivity',
+  'Social & Communication',
+  'Entertainment & Media',
+  'Games',
+  'Finance & Business',
+  'Utilities',
+  'Education',
+  'Personalization',
+  'Other'
+];
 
 const TAB = { 
   OVERVIEW: 'overview', 
   APPS: 'apps', 
   USERS: 'users', 
   TEAM: 'team', 
-  UPCOMING: 'upcoming', 
-  UPLOAD: 'upload' 
+  UPCOMING: 'upcoming' 
 };
 
 const AdminDashboard = () => {
@@ -55,10 +70,6 @@ const AdminDashboard = () => {
     progress: 0
   });
 
-  // Upload form state
-  const [formData, setFormData] = useState({ name: '', version: '', description: '', size: '' });
-  const [files, setFiles] = useState({ icon: null, apk: null });
-
   // Core Team form state
   const [teamForm, setTeamForm] = useState({
     name: '',
@@ -73,6 +84,7 @@ const AdminDashboard = () => {
   // Upcoming Release form state
   const [upcomingForm, setUpcomingForm] = useState({
     app_name: '',
+    category: 'Tools',
     tagline: '',
     description: '',
     version: 'v1.0.0',
@@ -85,6 +97,71 @@ const AdminDashboard = () => {
   });
   const [upcomingIconFile, setUpcomingIconFile] = useState(null);
   const [upcomingIconPreview, setUpcomingIconPreview] = useState(null);
+
+  // Edit Pipeline Progress State
+  const [editTeaserModal, setEditTeaserModal] = useState({
+    isOpen: false,
+    item: null,
+    progress: 50,
+    version: '',
+    estimated_release: 'Coming Soon',
+    tagline: '',
+    description: '',
+    category: 'Tools',
+    loading: false,
+    error: ''
+  });
+
+  const handleOpenEditTeaser = (item) => {
+    setEditTeaserModal({
+      isOpen: true,
+      item,
+      progress: item.progress || 50,
+      version: item.version || '',
+      estimated_release: item.estimated_release || 'Coming Soon',
+      tagline: item.tagline || '',
+      description: cleanAppDescription(item.description || ''),
+      category: getAppCategory(item),
+      loading: false,
+      error: ''
+    });
+  };
+
+  const handleUpdateTeaserProgress = async (e) => {
+    e.preventDefault();
+    if (!editTeaserModal.item) return;
+
+    setEditTeaserModal(prev => ({ ...prev, loading: true, error: '' }));
+    try {
+      const cleanDesc = cleanAppDescription(editTeaserModal.description || '').trim();
+      const finalDesc = editTeaserModal.category
+        ? `[Category: ${editTeaserModal.category}]\n\n${cleanDesc}`.trim()
+        : cleanDesc;
+
+      const progressVal = Math.min(100, Math.max(0, parseInt(editTeaserModal.progress, 10) || 0));
+
+      const { error: updateErr } = await supabase
+        .from('upcoming_releases')
+        .update({
+          progress: progressVal,
+          version: editTeaserModal.version || 'v1.0.0-beta',
+          estimated_release: editTeaserModal.estimated_release || 'Coming Soon',
+          target_date: editTeaserModal.estimated_release || 'Coming Soon',
+          tagline: editTeaserModal.tagline || '',
+          description: finalDesc,
+          tags: [editTeaserModal.category || 'Tools'],
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editTeaserModal.item.id);
+
+      if (updateErr) throw updateErr;
+
+      setEditTeaserModal({ isOpen: false, item: null, progress: 50, version: '', estimated_release: 'Coming Soon', tagline: '', description: '', category: 'Tools', loading: false, error: '' });
+      fetchAll();
+    } catch (err) {
+      setEditTeaserModal(prev => ({ ...prev, loading: false, error: err.message || 'Failed to update progress' }));
+    }
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -243,10 +320,16 @@ const AdminDashboard = () => {
         }
       }
 
+      let finalDesc = upcomingForm.description?.trim() || '';
+      if (upcomingForm.category && !finalDesc.includes('[Category:')) {
+        finalDesc = `[Category: ${upcomingForm.category}]\n\n${finalDesc}`.trim();
+      }
+
       const { error } = await supabase.from('upcoming_releases').insert([{
         app_name: upcomingForm.app_name,
         tagline: upcomingForm.tagline || '',
-        description: upcomingForm.description || '',
+        description: finalDesc,
+        tags: [upcomingForm.category || 'Tools'],
         version: upcomingForm.version || 'v1.0.0',
         estimated_release: upcomingForm.estimated_release || 'Coming Soon',
         target_date: upcomingForm.estimated_release || 'Coming Soon',
@@ -264,7 +347,7 @@ const AdminDashboard = () => {
       if (error) throw error;
 
       setActionStatus({ loading: false, success: 'Upcoming release teaser created!', error: null });
-      setUpcomingForm({ app_name: '', tagline: '', description: '', version: 'v1.0.0', estimated_release: 'Coming Soon', progress: 50, github_repo_url: '', icon_url: '', is_update: false, existing_app_id: null });
+      setUpcomingForm({ app_name: '', category: 'Tools', tagline: '', description: '', version: 'v1.0.0', estimated_release: 'Coming Soon', progress: 50, github_repo_url: '', icon_url: '', is_update: false, existing_app_id: null });
       setUpcomingIconFile(null);
       setUpcomingIconPreview(null);
       fetchAll();
@@ -417,70 +500,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Direct Supabase App Upload
-  const handleUploadSubmit = async (e) => {
-    e.preventDefault();
-    if (!files.apk) {
-      setActionStatus({ loading: false, success: null, error: 'Please select an APK file' });
-      return;
-    }
-
-    setActionStatus({ loading: true, success: null, error: null });
-
-    try {
-      let iconUrl = null;
-      let finalFileUrl = null;
-
-      if (files.icon) {
-        const iconFileName = `icons/${Date.now()}-${files.icon.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-        const { error: iconError } = await supabase.storage.from('cstore-apps').upload(iconFileName, files.icon, { upsert: true });
-        if (iconError) throw iconError;
-        const { data: { publicUrl: iconPublicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(iconFileName);
-        iconUrl = iconPublicUrl;
-      }
-
-      const apkFileName = `${Date.now()}-${files.apk.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      const { error: apkError } = await supabase.storage.from('cstore-apps').upload(apkFileName, files.apk, { upsert: true });
-      if (apkError) throw apkError;
-      const { data: { publicUrl: apkPublicUrl } } = supabase.storage.from('cstore-apps').getPublicUrl(apkFileName);
-      finalFileUrl = apkPublicUrl;
-
-      const { error: dbError } = await supabase.from('apps').insert([{
-        name: formData.name,
-        version: formData.version || 'v1.0.0',
-        description: formData.description || '',
-        file_url: finalFileUrl,
-        icon_url: iconUrl,
-        download_count: 0,
-        size: formData.size || 'Unknown',
-        is_chunked: false,
-        chunk_count: 1,
-        user_id: user?.id || null,
-        publisher_name: user?.name || 'Mohd Salman (Movin)',
-        publisher_email: user?.email || 'mohdsalman4151@gmail.com'
-      }]);
-      if (dbError) throw dbError;
-
-      setActionStatus({ loading: false, success: 'App published successfully!', error: null });
-      setFormData({ name: '', version: '', description: '', size: '' });
-      setFiles({ icon: null, apk: null });
-      fetchAll();
-    } catch (err) {
-      setActionStatus({ loading: false, success: null, error: err.message });
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (e.target.name === 'apk' && file) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      setFormData(prev => ({ ...prev, size: `${sizeMB} MB` }));
-      setFiles({ ...files, apk: file });
-    } else {
-      setFiles({ ...files, [e.target.name]: file });
-    }
-  };
-
   const handleLogout = () => { logout(); navigate('/'); };
   const formatDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -551,7 +570,6 @@ const AdminDashboard = () => {
             <button style={tabStyle(TAB.TEAM)} onClick={() => setActiveTab(TAB.TEAM)}><Users size={15} /> Core Team ({teamMembers.length})</button>
             <button style={tabStyle(TAB.UPCOMING)} onClick={() => setActiveTab(TAB.UPCOMING)}><Rocket size={15} /> Teasers ({upcomingList.length})</button>
             <button style={tabStyle(TAB.USERS)} onClick={() => setActiveTab(TAB.USERS)}><UserCheck size={15} /> Users ({users.length})</button>
-            <button style={tabStyle(TAB.UPLOAD)} onClick={() => setActiveTab(TAB.UPLOAD)}><Upload size={15} /> Upload App</button>
           </div>
 
           {/* ── OVERVIEW TAB ── */}
@@ -593,7 +611,14 @@ const AdminDashboard = () => {
                   <tbody>
                     {apps.slice(0, 5).map(app => (
                       <tr key={app.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.9rem' }}>
-                        <td style={{ padding: '12px 14px', fontWeight: 600, color: 'white' }}>{app.name}</td>
+                        <td style={{ padding: '12px 14px', fontWeight: 600, color: 'white' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>{app.name}</span>
+                            <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.35)', color: '#a5b4fc', fontWeight: 700 }}>
+                              {getAppCategory(app)}
+                            </span>
+                          </div>
+                        </td>
                         <td style={{ padding: '12px 14px', color: '#a5b4fc' }}>{app.version}</td>
                         <td style={{ padding: '12px 14px', color: 'var(--text-muted)' }}>{app.size}</td>
                         <td style={{ padding: '12px 14px', color: '#10b981', fontWeight: 600 }}>{app.download_count}</td>
@@ -611,9 +636,6 @@ const AdminDashboard = () => {
             <div className="glass" style={{ padding: '1.5rem', borderRadius: '18px', overflowX: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                 <h3 style={{ fontSize: '1.25rem', margin: 0 }}>All Published Applications ({apps.length})</h3>
-                <button onClick={() => setActiveTab(TAB.UPLOAD)} className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Plus size={15} /> Add New App
-                </button>
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '750px' }}>
                 <thead>
@@ -662,7 +684,10 @@ const AdminDashboard = () => {
                         <td style={{ padding: '12px 14px', fontWeight: 600, color: 'white' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                             {app.icon_url && <img src={app.icon_url} alt="" style={{ width: '28px', height: '28px', borderRadius: '7px', objectFit: 'cover' }} />}
-                            <span>{app.name}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span>{app.name}</span>
+                              <span style={{ fontSize: '0.68rem', color: '#a5b4fc', fontWeight: 600 }}>{getAppCategory(app)}</span>
+                            </div>
                           </div>
                         </td>
                         <td style={{ padding: '12px 14px', color: '#a5b4fc', fontWeight: 600 }}>{app.version}</td>
@@ -743,7 +768,7 @@ const AdminDashboard = () => {
 
           {/* ── CORE TEAM MANAGEMENT TAB ── */}
           {activeTab === TAB.TEAM && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(320px, 1.3fr)', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '2rem' }}>
               
               {/* Form: Add Core Team Member */}
               <div className="glass" style={{ padding: '2rem', borderRadius: '20px' }}>
@@ -920,7 +945,7 @@ const AdminDashboard = () => {
 
           {/* ── UPCOMING RELEASES (COMING SOON) MANAGEMENT TAB ── */}
           {activeTab === TAB.UPCOMING && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(320px, 1.3fr)', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '2rem' }}>
               
               {/* Form: Create Upcoming Release */}
               <div className="glass" style={{ padding: '2rem', borderRadius: '20px' }}>
@@ -1046,6 +1071,23 @@ const AdminDashboard = () => {
                         style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '11px', borderRadius: '10px', color: 'white', fontFamily: 'inherit' }}
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Category *
+                    </label>
+                    <select
+                      value={upcomingForm.category || 'Tools'}
+                      onChange={e => setUpcomingForm({ ...upcomingForm, category: e.target.value })}
+                      style={{ width: '100%', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--glass-border)', padding: '11px', borderRadius: '10px', color: 'white', fontFamily: 'inherit', cursor: 'pointer' }}
+                    >
+                      {CATEGORIES.map(cat => (
+                        <option key={cat} value={cat} style={{ background: '#0f172a', color: 'white' }}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -1258,6 +1300,25 @@ const AdminDashboard = () => {
                           </div>
 
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                              <button
+                                onClick={() => handleOpenEditTeaser(item)}
+                                style={{
+                                  background: 'rgba(99, 102, 241, 0.15)',
+                                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                                  color: '#c084fc',
+                                  padding: '6px 10px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem'
+                                }}
+                                title="Edit pipeline progress & release info"
+                              >
+                                <Sliders size={12} /> Edit Progress
+                              </button>
                               {!item.is_published && (
                                 <button
                                   onClick={() => setPublishModal({ isOpen: true, item, file: null, loading: false, error: '', progress: 0 })}
@@ -1290,12 +1351,22 @@ const AdminDashboard = () => {
 
                           {/* Progress Bar */}
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>
                               <span>Pipeline Status</span>
-                              <span style={{ color: '#a5b4fc', fontWeight: 700 }}>{item.progress}%</span>
+                              <span 
+                                onClick={() => handleOpenEditTeaser(item)}
+                                style={{ color: '#a5b4fc', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                title="Click to edit progress"
+                              >
+                                {item.progress}% Completed
+                              </span>
                             </div>
-                            <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${item.progress}%`, background: item.is_update ? 'linear-gradient(90deg, #f59e0b, #ef4444)' : 'var(--accent-gradient)', borderRadius: '3px' }} />
+                            <div 
+                              onClick={() => handleOpenEditTeaser(item)}
+                              style={{ height: '7px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', cursor: 'pointer' }}
+                              title="Click to edit progress"
+                            >
+                              <div style={{ height: '100%', width: `${item.progress}%`, background: item.is_update ? 'linear-gradient(90deg, #f59e0b, #ef4444)' : 'var(--accent-gradient)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
                             </div>
                           </div>
 
@@ -1359,87 +1430,13 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ── UPLOAD APP TAB ── */}
-          {activeTab === TAB.UPLOAD && (
-            <div className="glass" style={{ maxWidth: '650px', margin: '0 auto', padding: '2.5rem', borderRadius: '24px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', color: 'var(--primary)' }}>
-                  <Upload size={32} />
-                </div>
-                <h2 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>Publish Application</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Upload Android APK directly into CStore Supabase Storage</p>
-              </div>
-
-              <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>App Name</label>
-                  <input type="text" name="name" required placeholder="e.g. MsmKhata" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Version</label>
-                    <input type="text" name="version" required placeholder="e.g. 1.0.0" value={formData.version} onChange={e => setFormData({ ...formData, version: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Size (Auto)</label>
-                    <input type="text" name="size" placeholder="Auto-calculated" value={formData.size} readOnly style={{ opacity: 0.7 }} />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Description</label>
-                  <textarea name="description" rows="3" placeholder="Describe key features..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
-                </div>
-
-                {/* APK File */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>APK File</label>
-                  <div 
-                    style={{ 
-                      position: 'relative',
-                      background: 'rgba(255,255,255,0.02)', 
-                      border: '2px dashed var(--glass-border)', 
-                      borderRadius: '16px', 
-                      padding: '2rem', 
-                      textAlign: 'center', 
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <input type="file" name="apk" accept=".apk" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                    <File size={32} style={{ color: 'var(--primary)', margin: '0 auto 0.75rem' }} />
-                    <h4 style={{ fontSize: '1rem', marginBottom: '0.25rem', color: 'white' }}>{files.apk ? files.apk.name : 'Choose APK file'}</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{files.apk ? `Size: ${formData.size}` : 'Up to 500MB chunked'}</p>
-                  </div>
-                </div>
-
-                {/* Icon File */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Icon (Optional)</label>
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '2px dashed var(--glass-border)', borderRadius: '12px', padding: '1rem', textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
-                    <input type="file" name="icon" accept="image/*" onChange={handleFileChange} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
-                    <ImageIcon size={20} color="var(--text-muted)" style={{ marginBottom: '0.25rem' }} />
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{files.icon ? files.icon.name : 'Click to select icon image'}</p>
-                  </div>
-                </div>
-
-                {actionStatus.error && <div style={{ color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{actionStatus.error}</div>}
-                {actionStatus.success && <div style={{ color: '#10b981', background: 'rgba(16,185,129,0.1)', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem' }}>{actionStatus.success}</div>}
-
-                <button type="submit" disabled={actionStatus.loading} className="btn-primary" style={{ padding: '14px', fontSize: '1rem' }}>
-                  {actionStatus.loading ? 'Publishing APK...' : 'Publish Application'}
-                </button>
-              </form>
-            </div>
-          )}
-
         </>
       )}
 
       {/* Launch / Publish Upcoming Release Modal */}
       {publishModal.isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="glass" style={{ maxWidth: '480px', width: '100%', padding: '2rem', borderRadius: '24px' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}>
+          <div className="glass" style={{ maxWidth: '480px', width: '100%', padding: '2rem', borderRadius: '24px', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
               <Rocket size={22} color="#10b981" />
               <h3 style={{ margin: 0, fontSize: '1.3rem', color: 'white' }}>
@@ -1531,6 +1528,274 @@ const AdminDashboard = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Pipeline Progress Modal */}
+      {editTeaserModal.isOpen && editTeaserModal.item && createPortal(
+        <div
+          className="modal-backdrop-in"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(2, 6, 23, 0.85)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            overflowY: 'auto'
+          }}
+          onClick={() => setEditTeaserModal(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            className="glass modal-card-in"
+            style={{
+              maxWidth: '540px',
+              width: '100%',
+              padding: '1.75rem',
+              borderRadius: '24px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              background: '#0b132b',
+              border: editTeaserModal.item.is_update ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(99, 102, 241, 0.4)',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(99, 102, 241, 0.25)',
+              position: 'relative'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(168, 85, 247, 0.4)'
+                }}>
+                  <Sliders size={20} color="#c084fc" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'white', fontWeight: 800 }}>Update Pipeline Progress</h3>
+                  <div style={{ fontSize: '0.78rem', color: '#a5b4fc', marginTop: '2px' }}>
+                    {editTeaserModal.item.app_name} • {editTeaserModal.item.is_update ? 'App Update' : 'New Launch'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditTeaserModal(prev => ({ ...prev, isOpen: false }))}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px', borderRadius: '50%' }}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+              Update how far development has progressed for this release. Your cards across the Explore deck and dashboard will reflect this in real time.
+            </p>
+
+            {editTeaserModal.error && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', padding: '10px 14px', borderRadius: '10px', fontSize: '0.83rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>{editTeaserModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateTeaserProgress} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              
+              {/* 1. Interactive Progress Slider Section */}
+              <div style={{
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '16px',
+                padding: '1.2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.85rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Sparkles size={14} color="#f59e0b" /> Development Progress
+                  </label>
+                  <span style={{
+                    fontSize: '1.15rem',
+                    fontWeight: 900,
+                    color: editTeaserModal.progress >= 90 ? '#34d399' : editTeaserModal.progress >= 50 ? '#c084fc' : '#fbbf24',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '3px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    {editTeaserModal.progress}%
+                  </span>
+                </div>
+
+                {/* Range Slider */}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={editTeaserModal.progress}
+                  onChange={e => setEditTeaserModal(prev => ({ ...prev, progress: parseInt(e.target.value, 10) }))}
+                  style={{ width: '100%', accentColor: '#c084fc', cursor: 'pointer', height: '6px' }}
+                />
+
+                {/* Animated Visual Progress Bar Preview */}
+                <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${editTeaserModal.progress}%`,
+                    background: editTeaserModal.item.is_update
+                      ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
+                      : 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+                    borderRadius: '4px',
+                    transition: 'width 0.25s ease'
+                  }} />
+                </div>
+
+                {/* Quick Preset Buttons */}
+                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  {[
+                    { label: '25% Start', val: 25 },
+                    { label: '50% Core', val: 50 },
+                    { label: '75% Alpha', val: 75 },
+                    { label: '90% Beta', val: 90 },
+                    { label: '100% Ready', val: 100 }
+                  ].map(preset => {
+                    const isSelected = editTeaserModal.progress === preset.val;
+                    return (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setEditTeaserModal(prev => ({ ...prev, progress: preset.val }))}
+                        style={{
+                          flex: 1,
+                          minWidth: '65px',
+                          padding: '6px 8px',
+                          borderRadius: '8px',
+                          border: isSelected ? '1px solid #c084fc' : '1px solid rgba(255, 255, 255, 0.08)',
+                          background: isSelected ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255, 255, 255, 0.03)',
+                          color: isSelected ? 'white' : 'var(--text-muted)',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Version & Estimated Release Date */}
+              <div className="modal-responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Target Version</label>
+                  <input
+                    type="text"
+                    value={editTeaserModal.version}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, version: e.target.value }))}
+                    placeholder="e.g. v1.1.0-beta"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Estimated Date</label>
+                  <input
+                    type="text"
+                    value={editTeaserModal.estimated_release}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, estimated_release: e.target.value }))}
+                    placeholder="e.g. Next Week / Dec 2026"
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* 3. Category & Short Tagline */}
+              <div className="modal-responsive-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Category</label>
+                  <select
+                    value={editTeaserModal.category}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, category: e.target.value }))}
+                    style={{ width: '100%', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem', cursor: 'pointer' }}
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat} style={{ background: '#0f172a', color: 'white' }}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Short Tagline</label>
+                  <input
+                    type="text"
+                    value={editTeaserModal.tagline}
+                    onChange={e => setEditTeaserModal(prev => ({ ...prev, tagline: e.target.value }))}
+                    placeholder="One sentence summary..."
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* 4. Detailed Description */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Detailed Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={editTeaserModal.description}
+                  onChange={e => setEditTeaserModal(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe recent progress milestones or features added..."
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '10px 12px', borderRadius: '10px', color: 'white', fontSize: '0.88rem', resize: 'none' }}
+                />
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditTeaserModal(prev => ({ ...prev, isOpen: false }))}
+                  style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-border)', borderRadius: '10px', color: '#cbd5e1', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editTeaserModal.loading}
+                  className="btn-primary"
+                  style={{
+                    flex: 2,
+                    padding: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.45rem',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    boxShadow: '0 4px 15px rgba(168, 85, 247, 0.35)',
+                    fontSize: '0.88rem'
+                  }}
+                >
+                  {editTeaserModal.loading ? <Loader2 size={16} className="animate-spin" /> : <Sliders size={16} />}
+                  {editTeaserModal.loading ? 'Updating...' : 'Save & Update Card'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Confirmation Modal */}

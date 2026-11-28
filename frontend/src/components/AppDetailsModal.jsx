@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, LayoutGrid } from 'lucide-react';
+import { getAppCategory, cleanAppDescription, getCategoryBadgeStyle } from '../utils/apkMetadata';
 
 const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
   const [isClosing, setIsClosing] = useState(false);
@@ -55,12 +56,12 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
           onClick={(e) => e.stopPropagation()}
           className={isClosing ? "modal-card-out" : "modal-card-in"}
           style={{
-            padding: '2.5rem',
+            padding: 'clamp(1.25rem, 4vw, 2.2rem)',
             borderRadius: '24px',
             maxWidth: '550px',
             width: '100%',
             position: 'relative',
-            maxHeight: '80vh',
+            maxHeight: '85vh',
             display: 'flex',
             flexDirection: 'column',
             boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8)',
@@ -73,9 +74,9 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
             onClick={() => handleDismiss(onClose)}
             style={{
               position: 'absolute',
-              top: '20px',
-              right: '20px',
-              background: 'rgba(255,255,255,0.05)',
+              top: '16px',
+              right: '16px',
+              background: 'rgba(255,255,255,0.06)',
               border: 'none',
               borderRadius: '50%',
               width: '36px',
@@ -95,34 +96,53 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
           </button>
 
           {/* Header Info */}
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', gap: 'clamp(0.85rem, 3vw, 1.5rem)', alignItems: 'center', marginBottom: '1.25rem' }}>
             <div style={{ 
-              width: '80px', height: '80px', borderRadius: '22px', 
+              width: 'clamp(56px, 14vw, 76px)', height: 'clamp(56px, 14vw, 76px)', borderRadius: 'clamp(14px, 3.5vw, 20px)', 
               background: 'rgba(255,255,255,0.03)', overflow: 'hidden',
               border: '1px solid var(--glass-border)',
               boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
               flexShrink: 0
             }}>
-              {app.icon_url ? <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <LayoutGrid size={36} style={{ margin: '22px', opacity: 0.5 }} />}
+              {app.icon_url ? <img src={app.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <LayoutGrid size={32} style={{ margin: '14px', opacity: 0.5 }} />}
             </div>
             <div>
-              <h3 style={{ fontSize: '1.6rem', color: 'white', marginBottom: '0.4rem' }}>{app.name}</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 700 }}>{app.version}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: 'clamp(1.15rem, 4vw, 1.5rem)', color: 'white', margin: 0, wordBreak: 'break-word' }}>{app.name}</h3>
+                {(() => {
+                  const cat = getAppCategory(app);
+                  const style = getCategoryBadgeStyle(cat);
+                  return (
+                    <span style={{
+                      fontSize: '0.68rem',
+                      padding: '2px 7px',
+                      borderRadius: '5px',
+                      background: style.bg,
+                      border: `1px solid ${style.border}`,
+                      color: style.color,
+                      fontWeight: 700
+                    }}>
+                      {cat}
+                    </span>
+                  );
+                })()}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 700 }}>{app.version}</span>
                 <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{app.size}</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{app.size}</span>
                 <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Download size={14} /> {app.download_count} downloads
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Download size={13} /> {app.download_count} dls
                 </span>
               </div>
             </div>
           </div>
 
-          <h4 style={{ fontSize: '1rem', color: 'white', marginBottom: '0.75rem', fontWeight: 600 }}>Description</h4>
+          <h4 style={{ fontSize: '0.95rem', color: 'white', marginBottom: '0.5rem', fontWeight: 600 }}>Description</h4>
           
           {/* Scrollable Description Container */}
-          <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem', marginBottom: '2rem' }}>
+          <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem', marginBottom: '1.5rem' }}>
             <p style={{ 
               color: 'var(--text-muted)', 
               fontSize: '0.95rem', 
@@ -130,7 +150,7 @@ const AppDetailsModal = ({ isOpen, onClose, app, onDownload }) => {
               margin: 0,
               whiteSpace: 'pre-wrap'
             }}>
-              {app.description || 'Elevate your experience with this premium utility designed for modern Android devices.'}
+              {cleanAppDescription(app.description) || 'Elevate your experience with this premium utility designed for modern Android devices.'}
             </p>
           </div>
 

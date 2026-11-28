@@ -120,7 +120,6 @@ const Navbar = () => {
   const navLinks = [
     { label: 'Explore', path: '/', icon: Compass },
     { label: 'Apps', path: '/apps', icon: LayoutGrid },
-    { label: 'Upload', path: isLoggedIn ? '/upload' : '/login', activePath: '/upload', icon: Upload },
     { label: 'Teams', path: '/developers', icon: Users },
     { label: 'Docs', path: '/docs', icon: BookOpen },
   ];

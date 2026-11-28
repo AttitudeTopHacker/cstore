@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X, GitBranch, Rocket, Download } from 'lucide-react';
+import { Upload, File, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, X, GitBranch, Rocket, Download, Sparkles } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth, isAdminUser } from '../context/AuthContext';
+import { parseApkMetadata, getAppCategory, cleanAppDescription, CATEGORIES } from '../utils/apkMetadata';
 
 const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = false }) => {
   if (!isOpen || !app) return null;
@@ -13,15 +14,18 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
   const [formData, setFormData] = useState({
     name: app.name || '',
     version: app.version || '',
-    description: app.description || '',
+    description: cleanAppDescription(app.description || ''),
     size: app.size || '',
   });
+  const [category, setCategory] = useState(getAppCategory(app));
 
   const [files, setFiles] = useState({ icon: null, apk: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState(''); // 'uploading_apk', 'uploading_icon', 'saving', 'done'
+  const [isParsingApk, setIsParsingApk] = useState(false);
+  const [extractedInfo, setExtractedInfo] = useState(null);
 
   // GitHub Release Option State (for User Dashboard)
   const [apkSource, setApkSource] = useState('local'); // 'local' | 'github'
@@ -33,10 +37,11 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
   const [githubRelease, setGithubRelease] = useState(null);
 
   useEffect(() => {
+    setCategory(getAppCategory(app));
     setFormData({
       name: app.name || '',
       version: app.version || '',
-      description: app.description || '',
+      description: cleanAppDescription(app.description || ''),
       size: app.size || '',
     });
     setFiles({ icon: null, apk: null });
@@ -47,6 +52,8 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
     setGithubRepo(app.github_repo || app.github_repo_url || '');
     setGithubRelease(null);
     setGithubError('');
+    setIsParsingApk(false);
+    setExtractedInfo(null);
   }, [app]);
 
   const handleFetchRelease = async (repoInput) => {
@@ -109,14 +116,14 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     if (name === 'name') {
-      const filtered = value.replace(/[^a-zA-Z ]/g, '');
+      const filtered = value.replace(/[^a-zA-Z0-9 ]/g, '');
       setFormData({ ...formData, name: filtered });
     } else {
       setFormData({ ...formData, [name]: value });
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (e.target.name === 'apk' && file) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
@@ -125,17 +132,36 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
         return;
       }
       setFormData(prev => ({ ...prev, size: `${sizeMB} MB` }));
-      setFiles({ ...files, apk: file });
+      setFiles(prev => ({ ...prev, apk: file }));
+      setIsParsingApk(true);
+      setExtractedInfo(null);
+
+      try {
+        const meta = await parseApkMetadata(file);
+        if (meta) {
+          setExtractedInfo(meta);
+          if (meta.version) {
+            setFormData(prev => ({ ...prev, version: meta.version }));
+          }
+          if (meta.iconFile && !files.icon) {
+            setFiles(prev => ({ ...prev, icon: meta.iconFile }));
+          }
+        }
+      } catch (err) {
+        console.warn('APK parse in UpdateModal:', err);
+      } finally {
+        setIsParsingApk(false);
+      }
     } else {
-      setFiles({ ...files, [e.target.name]: file });
+      setFiles(prev => ({ ...prev, [e.target.name]: file }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return setError('App name is required!');
-    if (!/^[a-zA-Z ]+$/.test(formData.name.trim())) {
-      return setError('App name can only contain letters and spaces.');
+    if (!/^[a-zA-Z0-9 ]+$/.test(formData.name.trim())) {
+      return setError('App name can only contain letters, numbers, and spaces.');
     }
 
     setLoading(true);
@@ -148,11 +174,39 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
       let isChunked = app.is_chunked;
       let chunkCount = app.chunk_count;
 
-      // 1. Upload APK if selected
-      if (files.apk) {
+      let uploadTargetFile = files.apk;
+
+      // In Option B (GitHub Release), stream directly from GitHub!
+      if (!uploadTargetFile && allowGitHub && apkSource === 'github' && githubRelease) {
+        setUploadStatus('uploading_apk');
+        setUploadProgress(5);
+        let blob = null;
+
+        try {
+          const proxyRes = await fetch(`/api/download-github-apk?url=${encodeURIComponent(githubRelease.downloadUrl)}`, {
+            headers: githubPat ? { 'x-github-token': githubPat } : {}
+          });
+          if (proxyRes.ok) blob = await proxyRes.blob();
+        } catch (_) {}
+
+        if (!blob) {
+          try {
+            const directRes = await fetch(githubRelease.downloadUrl);
+            if (directRes.ok) blob = await directRes.blob();
+          } catch (_) {}
+        }
+
+        if (blob) {
+          uploadTargetFile = new File([blob], githubRelease.apkName, { type: 'application/vnd.android.package-archive' });
+        }
+      }
+
+      // 1. Upload APK if selected or streamed from GitHub
+      if (uploadTargetFile) {
         setUploadStatus('uploading_apk');
         const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
-        const fileSize = files.apk.size;
+        const fileSize = uploadTargetFile.size;
+        finalSize = `${(fileSize / (1024 * 1024)).toFixed(1)} MB`;
 
         if (fileSize > CHUNK_SIZE) {
           isChunked = true;
@@ -162,7 +216,7 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
           for (let i = 0; i < chunkCount; i++) {
             const start = i * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, fileSize);
-            const chunk = files.apk.slice(start, end);
+            const chunk = uploadTargetFile.slice(start, end);
             const chunkName = `${chunkAppId}_part_${i}`;
             
             const { error: uploadError } = await supabase.storage
@@ -182,10 +236,10 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
         } else {
           isChunked = false;
           chunkCount = 1;
-          const apkFileName = `${Date.now()}-${files.apk.name.replace(/\s+/g, '_')}`;
+          const apkFileName = `${Date.now()}-${uploadTargetFile.name.replace(/\s+/g, '_')}`;
           const { error: apkError } = await supabase.storage
             .from('cstore-apps')
-            .upload(apkFileName, files.apk, {
+            .upload(apkFileName, uploadTargetFile, {
               onUploadProgress: (p) => {
                 const percent = Math.round((p.loaded / p.total) * 100);
                 setUploadProgress(percent);
@@ -224,10 +278,13 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
         console.warn('History archive notice:', histErr.message);
       }
 
+      const cleanDesc = cleanAppDescription(formData.description || '').trim();
+      const finalDescription = `[Category: ${category}]\n\n${cleanDesc}`;
+
       const { error: updateError } = await supabase.from('apps').update({
         name: formData.name,
         version: formData.version,
-        description: formData.description,
+        description: finalDescription,
         file_url: finalFileUrl,
         icon_url: finalIconUrl,
         size: formData.size,
@@ -260,6 +317,7 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
       {/* Overlay */}
       <div
         onClick={onClose}
+        className="modal-backdrop-in"
         style={{
           position: 'fixed',
           top: 0,
@@ -273,15 +331,16 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
           justifyContent: 'center',
           alignItems: 'center',
           zIndex: 99999,
-          padding: '1.5rem',
+          padding: '1rem',
           overflowY: 'auto'
         }}
       >
         {/* Card Container */}
         <div
           onClick={(e) => e.stopPropagation()}
+          className="glass modal-card-in"
           style={{
-            padding: '2.5rem',
+            padding: 'clamp(1.25rem, 3.5vw, 2.2rem)',
             borderRadius: '24px',
             maxWidth: '650px',
             width: '100%',
@@ -382,29 +441,43 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
               )}
             </div>
           ) : (
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div className="modal-responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '1rem' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>App Name *</label>
+                  <label style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>App Name *</label>
                   <input
                     type="text"
                     name="name"
                     required
                     value={formData.name}
                     onChange={handleInputChange}
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none', fontSize: '0.95rem' }}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', padding: '11px 14px', borderRadius: '10px', color: 'white', outline: 'none', fontSize: '0.92rem' }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Version (e.g. v1.1.0) *</label>
+                  <label style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>Version (e.g. v1.1.0) *</label>
                   <input
                     type="text"
                     name="version"
                     required
                     value={formData.version}
                     onChange={handleInputChange}
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'white', outline: 'none', fontSize: '0.95rem' }}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)', padding: '11px 14px', borderRadius: '10px', color: 'white', outline: 'none', fontSize: '0.92rem' }}
                   />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.45rem', color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>Category *</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    style={{ width: '100%', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--glass-border)', padding: '11px 14px', borderRadius: '10px', color: 'white', outline: 'none', fontSize: '0.92rem', cursor: 'pointer' }}
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat} style={{ background: '#0f172a', color: 'white' }}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -557,30 +630,8 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                {/* APK Upload (Optional) */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    {allowGitHub && apkSource === 'github' ? 'Upload Release APK (.apk)' : 'New APK File (Optional)'}
-                  </label>
-                  <div style={{ position: 'relative', width: '100%' }}>
-                    <input
-                      type="file"
-                      name="apk"
-                      accept=".apk"
-                      onChange={handleFileChange}
-                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px dashed var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.85rem', overflow: 'hidden' }}>
-                      <File size={16} style={{ flexShrink: 0 }} />
-                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {files.apk ? files.apk.name : (allowGitHub && apkSource === 'github' ? 'Drop downloaded APK here' : 'Select newer .apk')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Icon Upload (Optional) */}
+              {/* If in GitHub mode, only Icon upload is shown; if in Local mode (or Admin Panel), both APK file and Icon are shown */}
+              {allowGitHub && apkSource === 'github' ? (
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>New Icon (Optional)</label>
                   <div style={{ position: 'relative', width: '100%' }}>
@@ -594,12 +645,63 @@ const UpdateAppModal = ({ isOpen, onClose, app, token, onSuccess, allowGitHub = 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px dashed var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.85rem', overflow: 'hidden' }}>
                       <ImageIcon size={16} style={{ flexShrink: 0 }} />
                       <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {files.icon ? files.icon.name : 'Select image icon'}
+                        {files.icon ? files.icon.name : 'Select image icon to update'}
                       </span>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  {/* APK Upload (Optional) */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>New APK File (Optional)</label>
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <input
+                        type="file"
+                        name="apk"
+                        accept=".apk"
+                        onChange={handleFileChange}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', zIndex: 2 }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px dashed var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.85rem', overflow: 'hidden' }}>
+                        {isParsingApk ? (
+                          <Loader2 size={16} className="animate-spin" style={{ color: '#c084fc', flexShrink: 0 }} />
+                        ) : (
+                          <File size={16} style={{ flexShrink: 0, color: files.apk ? '#a855f7' : 'inherit' }} />
+                        )}
+                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {isParsingApk ? 'Reading newer APK...' : files.apk ? files.apk.name : 'Select newer .apk'}
+                        </span>
+                      </div>
+                    </div>
+                    {extractedInfo && (
+                      <div style={{ marginTop: '4px', fontSize: '0.74rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <Sparkles size={11} /> Auto-filled version {formData.version} ({formData.size})
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Icon Upload (Optional) */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>New Icon (Optional)</label>
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <input
+                        type="file"
+                        name="icon"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px dashed var(--glass-border)', padding: '12px', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.85rem', overflow: 'hidden' }}>
+                        <ImageIcon size={16} style={{ flexShrink: 0 }} />
+                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {files.icon ? files.icon.name : 'Select image icon'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Submit Buttons */}
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>

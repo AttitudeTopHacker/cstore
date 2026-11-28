@@ -33,14 +33,6 @@ const BottomNavbar = () => {
         <span>Teams</span>
       </NavLink>
 
-      <NavLink 
-        to={isLoggedIn ? "/upload" : "/login"} 
-        className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-      >
-        <Upload size={22} />
-        <span>Upload</span>
-      </NavLink>
-
       {isLoggedIn ? (
         <NavLink 
           to="/dashboard" 
